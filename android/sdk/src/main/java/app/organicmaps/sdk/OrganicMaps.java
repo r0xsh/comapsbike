@@ -28,10 +28,13 @@ import app.organicmaps.sdk.util.concurrency.UiThread;
 import app.organicmaps.sdk.util.log.Logger;
 import app.organicmaps.sdk.util.log.LogsManager;
 import java.io.IOException;
+import java.util.Objects;
 
 public final class OrganicMaps implements DefaultLifecycleObserver
 {
   private static final String TAG = OrganicMaps.class.getSimpleName();
+
+  private static volatile OrganicMaps sInstance;
 
   @NonNull
   private final String mFlavor;
@@ -83,6 +86,7 @@ public final class OrganicMaps implements DefaultLifecycleObserver
                      @NonNull String versionName, @NonNull String fileProviderAuthority,
                      @NonNull LocationProviderFactory locationProviderFactory)
   {
+    sInstance = this;
     mFlavor = flavor;
     mContext = context.getApplicationContext();
     mPreferences = mContext.getSharedPreferences(context.getString(R.string.pref_file_name), Context.MODE_PRIVATE);
@@ -143,6 +147,18 @@ public final class OrganicMaps implements DefaultLifecycleObserver
   public SharedPreferences getPreferences()
   {
     return mPreferences;
+  }
+
+  @NonNull
+  public Context getContext()
+  {
+    return mContext;
+  }
+
+  @NonNull
+  public static OrganicMaps getInstance()
+  {
+    return Objects.requireNonNull(sInstance, "OrganicMaps is not initialized");
   }
 
   private void initNativePlatform() throws IOException

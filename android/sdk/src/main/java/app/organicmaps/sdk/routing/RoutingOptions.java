@@ -23,7 +23,8 @@ public final class RoutingOptions
 
   public static boolean hasOption(@NonNull RoadType roadType, @NonNull Router router)
   {
-    if (router == Router.Ruler)
+    // Ruler and BRouter ignore organicmaps road-type options.
+    if (router == Router.Ruler || router == Router.BRouter)
       return false;
     return nativeHasOption(roadType.ordinal(), router.ordinal());
   }

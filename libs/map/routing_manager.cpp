@@ -16,6 +16,7 @@
 #include "routing/routing_callbacks.hpp"
 #include "routing/routing_settings.hpp"
 #include "routing/ruler_router.hpp"
+#include "routing/brouter_router.hpp"
 #include "routing/segment.hpp"
 #include "routing/speed_camera.hpp"
 #include "routing/vehicle_mask.hpp"
@@ -222,6 +223,8 @@ VehicleType GetVehicleType(RouterType routerType)
   case RouterType::Vehicle: return VehicleType::Car;
   case RouterType::Transit: return VehicleType::Transit;
   case RouterType::Ruler: return VehicleType::Transit;
+  // BRouter is a bicycle-first engine (the Java client sends v=bicycle).
+  case RouterType::BRouter: return VehicleType::Bicycle;
   case RouterType::Count: CHECK(false, ("Invalid type", routerType)); return VehicleType::Count;
   }
   UNREACHABLE();
@@ -294,9 +297,13 @@ drape_ptr<df::Subroute> CreateDrapeSubroute(vector<RouteSegment> const & segment
 
   if (firstReal == kInvalidId)
   {
-    // All segments are fake.
-    subroute->m_headFakeDistance = 0.0;
-    subroute->m_tailFakeDistance = 0.0;
+    // All segments are fake (BRouter routes). Fake borders of 0.0 would make
+    // the shader paint the whole polyline with the grey u_fakeColor (the
+    // tail coefficient is 1 - step(v_length.x, 0.0)). Push both borders
+    // outside the subroute so the polyline renders with its normal style.
+    auto const subrouteLen = segments.back().GetDistFromBeginningMerc() - baseDistance;
+    subroute->m_headFakeDistance = -kBias;
+    subroute->m_tailFakeDistance = subrouteLen + kBias;
   }
   else
   {
@@ -510,7 +517,11 @@ RouterType routing::GetLastUsedRouter()
   case RouterType::Pedestrian:
   case RouterType::Bicycle:
   case RouterType::Transit:
-  case RouterType::Ruler: return routerType;
+  case RouterType::Ruler:
+  // BRouter is a mode of the bicycle profile (selected in the cycling
+  // routing options, no dedicated plan-screen button), so the last used
+  // engine is reported as Bicycle.
+  case RouterType::BRouter: return RouterType::Bicycle;
   default: return RouterType::Vehicle;
   }
 }
@@ -551,6 +562,10 @@ void RoutingManager::SetRouterImpl(RouterType type)
   std::unique_ptr<IRouter> router;
   if (type == RouterType::Ruler)
     router = make_unique<RulerRouter>();
+  else if (type == RouterType::BRouter)
+  {
+    router = make_unique<BRouterRouter>();
+  }
   else
     router = make_unique<IndexRouter>(
         vehicleType, m_loadAltitudes, m_callbacks.m_countryParentNameGetterFn, countryFileGetter, getMwmRectByName,
@@ -559,6 +574,36 @@ void RoutingManager::SetRouterImpl(RouterType type)
   m_routingSession.SetRoutingSettings(GetRoutingSettings(vehicleType));
   m_routingSession.SetRouter(std::move(router), std::move(regionsFinder));
   m_currentRouterType = type;
+}
+
+uint32_t RoutingManager::GetRouteAlternativeCount() const
+{
+  return m_routingSession.GetRouteCount();
+}
+
+uint32_t RoutingManager::GetActiveRouteIndex() const
+{
+  return m_routingSession.GetActiveRouteIndex();
+}
+
+bool RoutingManager::SelectRouteAlternative(uint32_t index)
+{
+  if (!m_routingSession.SelectAlternative(index))
+    return false;
+  // Re-render the polyline through the drape engine so the swap is visible.
+  // GetActiveRoute returns the currently selected route (primary or
+  // alternative); InsertRoute handles the engine update.
+  if (m_drapeEngine && m_routingSession.IsRouteValid())
+  {
+    auto route = m_routingSession.GetRouteForTests();
+    InsertRoute(*route);
+  }
+  return true;
+}
+
+bool RoutingManager::GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const
+{
+  return m_routingSession.GetRouteAlternativeInfo(index, timeSec, distanceM);
 }
 
 void RoutingManager::RemoveRoute(bool deactivateFollowing)
@@ -839,6 +884,15 @@ bool RoutingManager::InsertRoute(Route const & route)
     }
     case RouterType::Bicycle:
     {
+      subroute->m_routeType = df::RouteType::Bicycle;
+      subroute->AddStyle(df::SubrouteStyle(df::kRouteBicycle, df::RoutePattern(8.0, 2.0)));
+      FillTurnsDistancesForRendering(segments, subroute->m_baseDistance, subroute->m_turns);
+      break;
+    }
+    case RouterType::BRouter:
+    {
+      // BRouter routes look like bicycle routes for rendering purposes: same
+      // colour scheme, same per-segment turn distance annotation.
       subroute->m_routeType = df::RouteType::Bicycle;
       subroute->AddStyle(df::SubrouteStyle(df::kRouteBicycle, df::RoutePattern(8.0, 2.0)));
       FillTurnsDistancesForRendering(segments, subroute->m_baseDistance, subroute->m_turns);

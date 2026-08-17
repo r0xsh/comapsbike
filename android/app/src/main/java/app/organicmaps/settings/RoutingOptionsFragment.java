@@ -18,6 +18,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
+import app.organicmaps.MwmApplication;
 import app.organicmaps.R;
 import app.organicmaps.base.BaseMwmToolbarFragment;
 import app.organicmaps.sdk.Router;
@@ -42,6 +43,7 @@ public class RoutingOptionsFragment extends BaseMwmToolbarFragment
   public static final String BUNDLE_ROAD_TYPES = "road_types";
   @NonNull
   private Set<RoadType> mRoadTypes = Collections.emptySet();
+  private boolean mBrouterEngine;
 
   @Override
   public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState)
@@ -59,6 +61,11 @@ public class RoutingOptionsFragment extends BaseMwmToolbarFragment
     mRoadTypes = savedInstanceState != null && savedInstanceState.containsKey(BUNDLE_ROAD_TYPES)
                    ? makeRouteTypes(savedInstanceState)
                    : RoutingOptions.getActiveRoadTypes(routerType);
+    // The engine is persisted in the prefs at toggle time (see
+    // CyclingOptionsFragment), so it survives rotation/process death without
+    // having to be saved in the instance state.
+    mBrouterEngine = MwmApplication.prefs(view.getContext())
+                        .getBoolean(RoutingController.PREF_BROUTER_ENGINE, false);
 
     ViewPager2 viewPager = view.findViewById(R.id.route_options_view_pager);
     OptionsPagerAdapter pagerAdapter = new OptionsPagerAdapter(this);
@@ -164,22 +171,16 @@ public class RoutingOptionsFragment extends BaseMwmToolbarFragment
   {
     Router routerType = RoutingController.get().getLastRouterType();
     Set<RoadType> lastActiveRoadTypes = RoutingOptions.getActiveRoadTypes(routerType);
-    return mRoadTypes.equals(lastActiveRoadTypes);
+    boolean engineChanged = routerType == Router.Bicycle
+                            && mBrouterEngine != MwmApplication.prefs(requireContext())
+                                                   .getBoolean(RoutingController.PREF_BROUTER_ENGINE, false);
+    return mRoadTypes.equals(lastActiveRoadTypes) && !engineChanged;
   }
 
   @Override
   public boolean onBackPressed()
   {
-    if (areSettingsNotChanged())
-    {
-      requireActivity().setResult(Activity.RESULT_CANCELED);
-    }
-    else
-    {
-      requireActivity().setResult(Activity.RESULT_OK);
-      RoutingController.get().rebuildLastRoute();
-    }
-
+    requireActivity().setResult(areSettingsNotChanged() ? Activity.RESULT_CANCELED : Activity.RESULT_OK);
     return super.onBackPressed();
   }
 }

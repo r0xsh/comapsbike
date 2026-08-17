@@ -7,9 +7,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.util.Pair;
 import app.organicmaps.sdk.Framework;
+import app.organicmaps.sdk.OrganicMaps;
 import app.organicmaps.sdk.Router;
 import app.organicmaps.sdk.bookmarks.data.FeatureId;
 import app.organicmaps.sdk.bookmarks.data.MapObject;
+import app.organicmaps.sdk.brouter.BRouterServiceClient;
 import app.organicmaps.sdk.location.LocationHelper;
 import app.organicmaps.sdk.util.concurrency.UiThread;
 import app.organicmaps.sdk.util.log.Logger;
@@ -62,6 +64,11 @@ public class RoutingController
   }
 
   private static final RoutingController sInstance = new RoutingController();
+
+  // The bicycle profile can be routed with the BRouter engine, selected in the
+  // cycling routing options. The UI keeps reporting Router.Bicycle; only the
+  // native engine selection is switched (see effectiveRouter()).
+  public static final String PREF_BROUTER_ENGINE = "brouter_engine";
 
   @Nullable
   private Container mContainer;
@@ -239,7 +246,7 @@ public class RoutingController
   public void initialize(@NonNull LocationHelper locationHelper)
   {
     mLastRouterType = Router.getLastUsed();
-    Router.set(mLastRouterType);
+    Router.set(effectiveRouter(mLastRouterType));
     mInvalidRoutePointsTransactionId = Framework.nativeInvalidRoutePointsTransactionId();
     mRemovingIntermediatePointsTransactionId = mInvalidRoutePointsTransactionId;
 
@@ -340,7 +347,7 @@ public class RoutingController
     setState(State.PREPARE);
 
     mLastRouterType = routerType;
-    Router.set(mLastRouterType);
+    Router.set(effectiveRouter(mLastRouterType));
 
     if (startPoint != null || endPoint != null)
       setPointsInternal(startPoint, endPoint);
@@ -815,7 +822,7 @@ public class RoutingController
       return;
 
     mLastRouterType = router;
-    Router.set(router);
+    Router.set(effectiveRouter(router));
 
     cancelRemovingIntermediatePointsTransaction();
 
@@ -826,6 +833,56 @@ public class RoutingController
   public Router getLastRouterType()
   {
     return mLastRouterType;
+  }
+
+  // Bicycle routes may be built with the BRouter engine (bicycle profile's
+  // routing options). Returns the native engine to use for the given UI router.
+  @NonNull
+  private static Router effectiveRouter(@NonNull Router router)
+  {
+    return isBRouterEngine(router) ? Router.BRouter : router;
+  }
+
+  /**
+   * True when the given UI router is Bicycle and the BRouter engine is both
+   * selected (cycling routing options) and installed. This is the single place
+   * that decides whether BRouter is actually used.
+   */
+  public static boolean isBRouterEngine(@NonNull Router router)
+  {
+    return router == Router.Bicycle
+           && OrganicMaps.getInstance().getPreferences().getBoolean(PREF_BROUTER_ENGINE, false)
+           && BRouterServiceClient.isBRouterInstalled(OrganicMaps.getInstance().getContext());
+  }
+
+  /**
+   * Number of alternative routes the current engine produced (1 if no
+   * alternatives are available).
+   */
+  public int getRouteAlternativeCount()
+  {
+    return Framework.nativeGetRouteAlternativeCount();
+  }
+
+  /** Index of the currently selected route (0 = primary, k >= 1 = alternatives[k-1]). */
+  public int getActiveRouteIndex()
+  {
+    return Framework.nativeGetActiveRouteIndex();
+  }
+
+  /**
+   * Switch to the alternative route at @p index. Returns false if the index
+   * is out of range. Triggers a UI refresh so the route polyline is updated.
+   */
+  public boolean selectRouteAlternative(int index)
+  {
+    if (!Framework.nativeSelectRouteAlternative(index))
+      return false;
+    // Refresh the cached RoutingInfo so the time/distance shown in the route
+    // plan panel reflects the newly active alternative.
+    mCachedRoutingInfo = Framework.nativeGetRouteFollowingInfo();
+    mContainer.updateBuildProgress(mLastBuildProgress, mLastRouterType);
+    return true;
   }
 
   private void cancelRemovingIntermediatePointsTransaction()

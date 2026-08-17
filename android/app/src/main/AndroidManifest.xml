@@ -73,6 +73,9 @@
       <action android:name="android.intent.action.PICK" />
       <data android:mimeType="vnd.android.cursor.dir/postal-address_v2" />
     </intent>
+    <!-- BRouter companion app: bind its routing service and launch its
+         profile management screen. -->
+    <package android:name="btools.routingapp"/>
   </queries>
 
   <!-- "android:resizeableActivity" allows free-form and split-screen modes -->

@@ -12,7 +12,6 @@ import androidx.fragment.app.Fragment;
 import app.organicmaps.R;
 import app.organicmaps.base.BaseMwmToolbarFragment;
 import app.organicmaps.sdk.Router;
-import app.organicmaps.sdk.routing.RoutingController;
 import app.organicmaps.sdk.routing.RoutingOptions;
 import app.organicmaps.sdk.settings.RoadType;
 import com.google.android.material.materialswitch.MaterialSwitch;

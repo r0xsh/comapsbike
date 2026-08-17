@@ -202,6 +202,17 @@ public:
   /// Returns the most situable router engine type.
   routing::RouterType GetBestRouter(m2::PointD const & startPoint, m2::PointD const & finalPoint) const;
   void SetLastUsedRouter(routing::RouterType type);
+
+  /// @name Alternative routes.
+  /// Count, active index and switching of the routes produced by the current
+  /// engine (BRouterRouter returns several; other engines return 1).
+  /// @{
+  uint32_t GetRouteAlternativeCount() const;
+  uint32_t GetActiveRouteIndex() const;
+  bool SelectRouteAlternative(uint32_t index);
+  /// Time (seconds) and distance (meters) of the route at @p index (0 = primary).
+  bool GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const;
+  /// @}
   // Sound notifications for turn instructions.
   void EnableTurnNotifications(bool enable) { m_routingSession.EnableTurnNotifications(enable); }
   bool AreTurnNotificationsEnabled() const { return m_routingSession.AreTurnNotificationsEnabled(); }

@@ -13,6 +13,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import app.organicmaps.MwmApplication;
@@ -25,13 +27,18 @@ import app.organicmaps.sdk.routing.RoutingInfo;
 import app.organicmaps.sdk.routing.RoutingOptions;
 import app.organicmaps.sdk.routing.TransitRouteInfo;
 import app.organicmaps.sdk.settings.RoadType;
+import app.organicmaps.sdk.util.Distance;
 import app.organicmaps.util.UiUtils;
+import app.organicmaps.util.Utils;
 import app.organicmaps.util.WindowInsetUtils.PaddingInsetsListener;
 import app.organicmaps.widget.RoutingToolbarButton;
 import app.organicmaps.widget.ToolbarController;
 import app.organicmaps.widget.WheelProgressView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textview.MaterialTextView;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RoutingPlanController extends ToolbarController
 {
@@ -57,6 +64,15 @@ public class RoutingPlanController extends ToolbarController
 
   int mFrameHeight;
   final int mAnimToggle;
+
+  @NonNull
+  private final LinearLayout mRouteAlternativesContainer;
+  @NonNull
+  private final View mRouteAlternativesScroll;
+  // Last chip strip state; used to skip rebuilds on progress ticks.
+  @Nullable
+  private List<String> mLastChipTexts;
+  private int mLastChipActiveIdx = -1;
 
   @NonNull
   private final FrameLayout mRoutingOptionsBanner;
@@ -108,6 +124,9 @@ public class RoutingPlanController extends ToolbarController
     mRoutingOptionsBanner = mFrame.findViewById(R.id.routing_options_banner);
     View btn = mFrame.findViewById(R.id.routing_options_btn);
     btn.setOnClickListener(v -> RoutingOptionsActivity.start(requireActivity(), startRoutingOptionsForResult));
+
+    mRouteAlternativesScroll = mFrame.findViewById(R.id.route_alternatives_scroll);
+    mRouteAlternativesContainer = mFrame.findViewById(R.id.route_alternatives_container);
 
     mRoutingOptionsLayoutListener = new SelfTerminatedRoutingOptionsLayoutListener();
     mAnimToggle =
@@ -170,8 +189,8 @@ public class RoutingPlanController extends ToolbarController
     RoutingController.get().setRouterType(Router.Vehicle);
   }
 
-  @Override
-  public void onUpClick()
+@Override
+public void onUpClick()
   {
     // Ignore the event if the back and start buttons are pressed at the same time.
     // See {@link #RoutingBottomMenuController.setStartButton()}.
@@ -195,11 +214,16 @@ public class RoutingPlanController extends ToolbarController
 
     final boolean ready = (buildState == RoutingController.BuildState.BUILT);
 
+    // Always refresh the chip strip so the chips are hidden when the route
+    // is cancelled or not yet built (avoids stale UI after cancel).
+    refreshAlternativeChips();
+
     if (!ready)
     {
       mRoutingBottomMenuController.hideAltitudeChartAndRoutingDetails();
       return;
     }
+
 
     if (isTransitType())
     {
@@ -220,6 +244,92 @@ public class RoutingPlanController extends ToolbarController
     final boolean showStartButton = !RoutingController.get().isRulerRouterType();
     mRoutingBottomMenuController.setStartButton(showStartButton);
     mRoutingBottomMenuController.showAltitudeChartAndRoutingDetails();
+  }
+
+  /**
+   * Populate the button strip below the toolbar with one app-style button per
+   * alternative route produced by the current engine. Visible only while in
+   * the plan phase (not during navigation) and only when there is more than
+   * one alternative. Tapping a button switches the active alternative.
+   *
+   * Called on every build-progress tick; the rebuild is skipped when nothing
+   * changed (same alternative count, same selection, same per-route stats,
+   * same visibility) so a progress tick does not churn the view hierarchy.
+   */
+  private void refreshAlternativeChips()
+  {
+    final int count = RoutingController.get().getRouteAlternativeCount();
+    final boolean navigating = RoutingController.get().isNavigating();
+    if (count <= 1 || navigating)
+    {
+      if (mRouteAlternativesContainer.getChildCount() != 0 || UiUtils.isVisible(mRouteAlternativesScroll))
+      {
+        mRouteAlternativesContainer.removeAllViews();
+        UiUtils.hide(mRouteAlternativesScroll);
+      }
+      mLastChipTexts = null;
+      return;
+    }
+    final int activeIdx = RoutingController.get().getActiveRouteIndex();
+    final List<String> texts = chipTexts(count);
+    if (activeIdx == mLastChipActiveIdx && texts.equals(mLastChipTexts) &&
+        mRouteAlternativesContainer.getChildCount() == count && UiUtils.isVisible(mRouteAlternativesScroll))
+      return;
+
+    mRouteAlternativesContainer.removeAllViews();
+    for (int i = 0; i < count; ++i)
+    {
+      final int index = i;
+      MaterialButton btn = (MaterialButton) LayoutInflater.from(requireActivity())
+                              .inflate(R.layout.routing_option_button, mRouteAlternativesContainer, false);
+      btn.setText(texts.get(i));
+      if (i == activeIdx)
+      {
+        btn.setActivated(true);
+        btn.setIconResource(R.drawable.ic_checkmark);
+        btn.setIconTint(ContextCompat.getColorStateList(requireActivity(), R.color.routing_toolbar_icon_tint));
+      }
+      else
+      {
+        // routing_option_button.xml bakes in the checkmark icon; unselected
+        // buttons must not show it.
+        btn.setIcon(null);
+      }
+      btn.setOnClickListener(v -> {
+        if (index == RoutingController.get().getActiveRouteIndex())
+          return;
+        RoutingController.get().selectRouteAlternative(index);
+      });
+      mRouteAlternativesContainer.addView(btn);
+    }
+    mLastChipTexts = texts;
+    mLastChipActiveIdx = activeIdx;
+    UiUtils.show(mRouteAlternativesScroll);
+  }
+
+  /**
+   * Label of each alternative chip: "Route N" plus, when available, the
+   * formatted travel time and distance of that particular alternative
+   * (extracted from the routing session via JNI).
+   */
+  private List<String> chipTexts(int count)
+  {
+    final List<String> texts = new ArrayList<>(count);
+    for (int i = 0; i < count; ++i)
+    {
+      String label = requireActivity().getString(R.string.routing_alternative_n, i + 1);
+      final Distance dist = Framework.nativeGetRouteAlternativeDistance(i);
+      if (dist != null)
+      {
+        final String time = Utils.formatRoutingTime(requireActivity(),
+                                                    Framework.nativeGetRouteAlternativeTimeSec(i),
+                                                    R.dimen.text_size_routing_number).toString();
+        label = requireActivity().getString(R.string.routing_alternative_summary, label,
+                                            dist.toString(requireActivity()), time);
+      }
+      texts.add(label);
+    }
+    return texts;
   }
 
   public void updateBuildProgress(int progress, @NonNull Router router)
@@ -252,6 +362,13 @@ public class RoutingPlanController extends ToolbarController
         mRouterTypes.check(R.id.ruler);
         yield mProgressRuler;
       }
+      case BRouter ->
+      {
+        // BRouter is a mode of the bicycle profile (selected in the cycling
+        // routing options); the plan screen shows it as the bicycle mode.
+        mRouterTypes.check(R.id.bicycle);
+        yield mProgressBicycle;
+      }
       default -> throw new IllegalArgumentException("unknown router: " + router);
     };
 
@@ -280,6 +397,11 @@ public class RoutingPlanController extends ToolbarController
   private boolean isRulerType()
   {
     return RoutingController.get().isRulerRouterType();
+  }
+
+  private boolean isBRouterEngine()
+  {
+    return RoutingController.isBRouterEngine(RoutingController.get().getLastRouterType());
   }
 
   void saveRoutingPanelState(@NonNull Bundle outState)
@@ -333,7 +455,8 @@ public class RoutingPlanController extends ToolbarController
   {
     mRoutingOptionsBanner.addOnLayoutChangeListener(mRoutingOptionsLayoutListener);
     UiUtils.show(mRoutingOptionsBanner);
-    boolean hasAnyOptions = !isRulerType() && RoutingOptions.hasAnyOptions(RoutingController.get().getLastRouterType());
+    boolean hasAnyOptions = !isRulerType() && !isBRouterEngine()
+                        && RoutingOptions.hasAnyOptions(RoutingController.get().getLastRouterType());
     if (hasAnyOptions)
     {
       LinearLayout container = mRoutingOptionsBanner.findViewById(R.id.routing_options_buttons_container);

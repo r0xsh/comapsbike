@@ -47,7 +47,8 @@ public:
   // @TODO(bykoianko) Gather |readyCallback|, |needMoreMapsCallback| and |removeRouteCallback|
   // to one delegate. No need to add |progressCallback| to the delegate.
   void CalculateRoute(Checkpoints const & checkpoints, m2::PointD const & direction, bool adjustToPrevRoute,
-                      ReadyCallbackOwnership const & readyCallback, NeedMoreMapsCallback const & needMoreMapsCallback,
+                      ReadyRoutesCallbackOwnership const & readyCallback,
+                      NeedMoreMapsCallback const & needMoreMapsCallback,
                       RemoveRouteCallback const & removeRouteCallback, ProgressCallback const & progressCallback,
                       uint32_t timeoutSec = RouterDelegate::kNoTimeout);
 
@@ -71,11 +72,12 @@ private:
   class RouterDelegateProxy
   {
   public:
-    RouterDelegateProxy(ReadyCallbackOwnership const & onReady, NeedMoreMapsCallback const & onNeedMoreMaps,
+    RouterDelegateProxy(ReadyRoutesCallbackOwnership const & onReady, NeedMoreMapsCallback const & onNeedMoreMaps,
                         RemoveRouteCallback const & onRemoveRoute, PointCheckCallback const & onPointCheck,
                         ProgressCallback const & onProgress, uint32_t timeoutSec);
 
     void OnReady(std::shared_ptr<Route> route, RouterResultCode resultCode);
+    void OnRoutesReady(std::vector<std::shared_ptr<Route>> routes, RouterResultCode resultCode);
     void OnNeedMoreMaps(uint64_t routeId, std::set<std::string> const & absentCounties);
     void OnRemoveRoute(RouterResultCode resultCode);
     void Cancel();
@@ -87,7 +89,7 @@ private:
     void OnPointCheck(ms::LatLon const & pt);
 
     std::mutex m_guard;
-    ReadyCallbackOwnership const m_onReadyOwnership;
+    ReadyRoutesCallbackOwnership const m_onReadyOwnership;
     // |m_onNeedMoreMaps| may be called after |m_onReadyOwnership| if
     // - it's possible to build route only if to load some maps
     // - there's a faster route, but it's necessary to load some more maps to build it

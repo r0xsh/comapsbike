@@ -19,7 +19,7 @@ namespace routing
 using std::lock_guard, std::unique_lock;
 // ----------------------------------------------------------------------------------------------------------------------------
 
-AsyncRouter::RouterDelegateProxy::RouterDelegateProxy(ReadyCallbackOwnership const & onReady,
+AsyncRouter::RouterDelegateProxy::RouterDelegateProxy(ReadyRoutesCallbackOwnership const & onReady,
                                                       NeedMoreMapsCallback const & onNeedMoreMaps,
                                                       RemoveRouteCallback const & onRemoveRoute,
                                                       PointCheckCallback const & onPointCheck,
@@ -45,7 +45,23 @@ void AsyncRouter::RouterDelegateProxy::OnReady(std::shared_ptr<Route> route, Rou
     if (m_delegate.IsCancelled())
       return;
   }
-  m_onReadyOwnership(std::move(route), resultCode);
+  std::vector<std::shared_ptr<Route>> routes;
+  if (route)
+    routes.push_back(std::move(route));
+  m_onReadyOwnership(std::move(routes), resultCode);
+}
+
+void AsyncRouter::RouterDelegateProxy::OnRoutesReady(std::vector<std::shared_ptr<Route>> routes,
+                                                     RouterResultCode resultCode)
+{
+  if (!m_onReadyOwnership)
+    return;
+  {
+    lock_guard l(m_guard);
+    if (m_delegate.IsCancelled())
+      return;
+  }
+  m_onReadyOwnership(std::move(routes), resultCode);
 }
 
 void AsyncRouter::RouterDelegateProxy::OnNeedMoreMaps(uint64_t routeId, std::set<std::string> const & absentCounties)
@@ -159,7 +175,7 @@ void AsyncRouter::SetRouter(std::unique_ptr<IRouter> && router, std::unique_ptr<
 }
 
 void AsyncRouter::CalculateRoute(Checkpoints const & checkpoints, m2::PointD const & direction, bool adjustToPrevRoute,
-                                 ReadyCallbackOwnership const & readyCallback,
+                                 ReadyRoutesCallbackOwnership const & readyCallback,
                                  NeedMoreMapsCallback const & needMoreMapsCallback,
                                  RemoveRouteCallback const & removeRouteCallback,
                                  ProgressCallback const & progressCallback, uint32_t timeoutSec)
@@ -298,7 +314,11 @@ void AsyncRouter::CalculateRoute()
     m_guides.clear();
   }
 
-  auto route = std::make_shared<Route>(router->GetName(), routeId);
+  // Prefer IRouter::CalculateRoutes so engines can return multiple alternative
+  // routes. The first route is the "primary" and any additional ones populate
+  // m_alternatives on the RoutingSession.
+  std::vector<std::shared_ptr<Route>> routes;
+  auto primaryRoute = std::make_shared<Route>(router->GetName(), routeId);
   RouterResultCode code;
 
   base::Timer timer;
@@ -312,34 +332,51 @@ void AsyncRouter::CalculateRoute()
     if (absentRegionsFinder)
       absentRegionsFinder->GenerateAbsentRegions(checkpoints, delegateProxy->GetDelegate());
 
-    // Run basic request.
-    code = router->CalculateRoute(checkpoints, startDirection, adjustToPrevRoute, delegateProxy->GetDelegate(), *route);
+    // Try the multi-route path first; engines that don't override it return a
+    // 1-element vector via the default implementation in IRouter::CalculateRoutes.
+    auto computed = router->CalculateRoutes(checkpoints, startDirection, adjustToPrevRoute,
+                                            delegateProxy->GetDelegate());
+    if (computed.empty())
+    {
+      // Fallback: legacy single-route engine.
+      code = router->CalculateRoute(checkpoints, startDirection, adjustToPrevRoute,
+                                    delegateProxy->GetDelegate(), *primaryRoute);
+      if (code == RouterResultCode::NoError)
+        routes.push_back(primaryRoute);
+    }
+    else
+    {
+      code = RouterResultCode::NoError;
+      for (auto & r : computed)
+        routes.push_back(std::make_shared<Route>(std::move(r)));
+    }
     router->SetGuides({});
     elapsedSec = timer.ElapsedSeconds();  // routing time
     LogCode(code, elapsedSec);
-    LOG(LINFO, ("ETA:", route->GetTotalTimeSec(), "sec."));
+    if (!routes.empty())
+      LOG(LINFO, ("ETA:", routes.front()->GetTotalTimeSec(), "sec. alternatives=", routes.size()));
   }
   catch (RootException const & e)
   {
     code = RouterResultCode::InternalError;
     LOG(LERROR, ("Exception happened while calculating route:", e.Msg()));
-    // Note. After call of this method |route| should be used only on ui thread.
-    // And |route| should stop using on routing background thread, in this method.
+    // Note. After call of this method |routes| should be used only on ui thread.
     GetPlatform().RunTask(Platform::Thread::Gui,
-                          [delegateProxy, route, code]() { delegateProxy->OnReady(route, code); });
+                          [delegateProxy, routes = std::move(routes), code]() mutable
+                          { delegateProxy->OnRoutesReady(std::move(routes), code); });
     return;
   }
 
   // Draw route without waiting network latency.
   if (code == RouterResultCode::NoError)
   {
-    // Note. After call of this method |route| should be used only on ui thread.
-    // And |route| should stop using on routing background thread, in this method.
     GetPlatform().RunTask(Platform::Thread::Gui,
-                          [delegateProxy, route, code]() { delegateProxy->OnReady(route, code); });
+                          [delegateProxy, routes = std::move(routes), code]() mutable
+                          { delegateProxy->OnRoutesReady(std::move(routes), code); });
   }
 
-  bool const needAbsentRegions = (code != RouterResultCode::Cancelled && route->GetRouterId() != "ruler-router");
+  bool const needAbsentRegions =
+      (code != RouterResultCode::Cancelled && (routes.empty() || routes.front()->GetRouterId() != "ruler-router"));
 
   std::set<std::string> absent;
   if (needAbsentRegions)
@@ -347,7 +384,8 @@ void AsyncRouter::CalculateRoute()
     if (absentRegionsFinder)
       absentRegionsFinder->GetAbsentRegions(absent);
 
-    absent.insert(route->GetAbsentCountries().cbegin(), route->GetAbsentCountries().cend());
+    if (!routes.empty())
+      absent.insert(routes.front()->GetAbsentCountries().cbegin(), routes.front()->GetAbsentCountries().cend());
     if (!absent.empty())
     {
       code = RouterResultCode::NeedMoreMaps;

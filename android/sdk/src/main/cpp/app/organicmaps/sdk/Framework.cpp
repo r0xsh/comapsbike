@@ -1891,4 +1891,43 @@ JNIEXPORT void JNICALL Java_app_organicmaps_sdk_Framework_nativeMemoryWarning(JN
   return frm()->MemoryWarning();
 }
 
+JNIEXPORT jint JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRouteAlternativeCount(JNIEnv *, jclass)
+{
+  return static_cast<jint>(frm()->GetRoutingManager().GetRouteAlternativeCount());
+}
+
+JNIEXPORT jint JNICALL Java_app_organicmaps_sdk_Framework_nativeGetActiveRouteIndex(JNIEnv *, jclass)
+{
+  return static_cast<jint>(frm()->GetRoutingManager().GetActiveRouteIndex());
+}
+
+JNIEXPORT jboolean JNICALL Java_app_organicmaps_sdk_Framework_nativeSelectRouteAlternative(JNIEnv *, jclass, jint index)
+{
+  return static_cast<jboolean>(frm()->GetRoutingManager().SelectRouteAlternative(static_cast<uint32_t>(index)));
+}
+
+// Formatted distance of the route at |index| (0 = primary), or null if the
+// index is out of range. Used by the alternative-route chips in the planning UI.
+JNIEXPORT jobject JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRouteAlternativeDistance(
+    JNIEnv * env, jclass, jint index)
+{
+  double timeSec = 0.0;
+  double distanceM = 0.0;
+  if (!frm()->GetRoutingManager().GetRouteAlternativeInfo(static_cast<uint32_t>(index), timeSec, distanceM))
+    return nullptr;
+  return ToJavaDistance(env, platform::Distance::CreateFormatted(distanceM));
+}
+
+// Total travel time in seconds of the route at |index| (0 = primary), or 0 if
+// the index is out of range. Used by the alternative-route chips in the planning UI.
+JNIEXPORT jint JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRouteAlternativeTimeSec(
+    JNIEnv *, jclass, jint index)
+{
+  double timeSec = 0.0;
+  double distanceM = 0.0;
+  if (!frm()->GetRoutingManager().GetRouteAlternativeInfo(static_cast<uint32_t>(index), timeSec, distanceM))
+    return 0;
+  return static_cast<jint>(timeSec);
+}
+
 }  // extern "C"

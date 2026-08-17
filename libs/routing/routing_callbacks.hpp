@@ -13,6 +13,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace routing
 {
@@ -83,6 +84,10 @@ using PointCheckCallback = std::function<void(ms::LatLon const &)>;
 using ProgressCallback = std::function<void(float)>;
 using ReadyCallback = std::function<void(Route const &, RouterResultCode)>;
 using ReadyCallbackOwnership = std::function<void(std::shared_ptr<Route>, RouterResultCode)>;
+/// \brief Like ReadyCallbackOwnership but carries the full alternatives vector
+/// returned by IRouter::CalculateRoutes. Engines that only produce a single
+/// route should use ReadyCallbackOwnership.
+using ReadyRoutesCallbackOwnership = std::function<void(std::vector<std::shared_ptr<Route>>, RouterResultCode)>;
 using RemoveRouteCallback = std::function<void(RouterResultCode)>;
 using RouteCallback = std::function<void(Route const &)>;
 using ChangeSessionStateCallback = std::function<void(SessionState previous, SessionState current)>;

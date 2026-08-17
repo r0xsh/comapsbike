@@ -41,6 +41,7 @@ enum class RouterType
   Bicycle,      /// For A star bicycle routing.
   Transit,      /// For A star pedestrian + transit routing.
   Ruler,        /// For simple straight line router.
+  BRouter,      /// For BRouter HTTPS-backed, GPX-returning engine.
   Count         /// Number of router types.
 };
 
@@ -75,6 +76,13 @@ public:
   /// @see Cancellable
   virtual RouterResultCode CalculateRoute(Checkpoints const & checkpoints, m2::PointD const & startDirection,
                                           bool adjust, RouterDelegate const & delegate, Route & route) = 0;
+
+  /// @brief Optional alternative-routes entry point. Default implementation wraps
+  /// CalculateRoute once and returns a one-element vector so existing engines
+  /// stay source-compatible. Engines that can produce multiple candidates
+  /// (e.g. an HTTPS-backed router returning several GPX tracks) override this.
+  virtual std::vector<Route> CalculateRoutes(Checkpoints const & checkpoints, m2::PointD const & startDirection,
+                                             bool adjust, RouterDelegate const & delegate);
 
   virtual bool FindClosestProjectionToRoad(m2::PointD const & point, m2::PointD const & direction, double radius,
                                            EdgeProj & proj) = 0;

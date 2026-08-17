@@ -1,6 +1,7 @@
 #include <jni.h>
 #include "app/organicmaps/sdk/Framework.hpp"
 #include "app/organicmaps/sdk/core/jni_helper.hpp"
+#include "routing/router.hpp"
 #include "routing/routing_options.hpp"
 
 static routing::RoutingOptions::Option makeValue(jint option)
@@ -10,18 +11,24 @@ static routing::RoutingOptions::Option makeValue(jint option)
   return static_cast<routing::RoutingOptions::Option>(opt);
 }
 
-static routing::VehicleType makeVehicle(jint vehicle)
+// Java Router enum ordinal → routing::RouterType → routing::VehicleType. Used
+// for routing options persistence so that Ruler/BRouter fall back to a sane
+// vehicle without crashing the JNI CHECK. BRouter is treated as bicycle since
+// BRouter's primary profile family is cycling.
+static routing::VehicleType routerToVehicle(jint router)
 {
-  auto const v = static_cast<uint8_t>(vehicle);
-  CHECK_LESS(v, static_cast<uint8_t>(routing::VehicleType::Count), ("invalid vehicle type", vehicle));
-  switch (v)  // this is super-ugly but java and C++ define constants differently: c.f. Router.java vehicle_mask.hpp
+  auto const r = static_cast<routing::RouterType>(router);
+  switch (r)
   {
-  default:
-  case 0: return routing::VehicleType::Car;
-  case 1: return routing::VehicleType::Pedestrian;
-  case 2: return routing::VehicleType::Bicycle;
-  case 3: return routing::VehicleType::Pedestrian; // transit
+  case routing::RouterType::Vehicle: return routing::VehicleType::Car;
+  case routing::RouterType::Pedestrian: return routing::VehicleType::Pedestrian;
+  case routing::RouterType::Bicycle: return routing::VehicleType::Bicycle;
+  case routing::RouterType::Transit: return routing::VehicleType::Transit;
+  case routing::RouterType::Ruler: return routing::VehicleType::Car;
+  case routing::RouterType::BRouter: return routing::VehicleType::Bicycle;
+  case routing::RouterType::Count: break;
   }
+  return routing::VehicleType::Car;
 }
 
 extern "C"
@@ -30,7 +37,7 @@ JNIEXPORT jboolean JNICALL Java_app_organicmaps_sdk_routing_RoutingOptions_nativ
                                                                                            jint option, jint vehicle)
 {
   CHECK(g_framework, ("Framework isn't created yet!"));
-  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(makeVehicle(vehicle));
+  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(routerToVehicle(vehicle));
   routing::RoutingOptions::Option opt = makeValue(option);
   return static_cast<jboolean>(routingOptions.Has(opt));
 }
@@ -39,7 +46,7 @@ JNIEXPORT void JNICALL Java_app_organicmaps_sdk_routing_RoutingOptions_nativeAdd
                                                                                        jint vehicle)
 {
   CHECK(g_framework, ("Framework isn't created yet!"));
-  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(makeVehicle(vehicle));
+  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(routerToVehicle(vehicle));
   routing::RoutingOptions::Option opt = makeValue(option);
   routingOptions.Add(opt);
   routing::RoutingOptions::SaveOptionsToSettings(routingOptions);
@@ -49,7 +56,7 @@ JNIEXPORT void JNICALL Java_app_organicmaps_sdk_routing_RoutingOptions_nativeRem
                                                                                           jint vehicle)
 {
   CHECK(g_framework, ("Framework isn't created yet!"));
-  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(makeVehicle(vehicle));
+  routing::RoutingOptions routingOptions = routing::RoutingOptions::LoadOptionsFromSettings(routerToVehicle(vehicle));
   routing::RoutingOptions::Option opt = makeValue(option);
   routingOptions.Remove(opt);
   routing::RoutingOptions::SaveOptionsToSettings(routingOptions);

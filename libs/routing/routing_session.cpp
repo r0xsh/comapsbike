@@ -124,11 +124,25 @@ m2::PointD RoutingSession::GetEndPoint() const
   return m_checkpoints.GetFinish();
 }
 
-void RoutingSession::DoReadyCallback::operator()(std::shared_ptr<Route> const & route, RouterResultCode e)
+void RoutingSession::DoReadyCallback::operator()(std::vector<std::shared_ptr<Route>> routes, RouterResultCode e)
 {
-  ASSERT(m_rs.m_route, ());
-  m_rs.AssignRoute(route, e);
-  m_callback(*m_rs.m_route, e);
+  if (routes.empty())
+  {
+    // No route produced; route the failure to the UI via AssignRoute with an
+    // empty path so m_alternatives stays empty.
+    m_rs.AssignRoute(std::shared_ptr<Route>{}, e);
+    return;
+  }
+  // Primary route + alternatives. Move routes[1:] aside and keep routes[0]
+  // as the primary. The callback is invoked once with the primary.
+  auto primary = routes.front();
+  std::vector<std::shared_ptr<Route>> alternatives;
+  alternatives.reserve(routes.size() - 1);
+  for (size_t i = 1; i < routes.size(); ++i)
+    alternatives.push_back(std::move(routes[i]));
+  m_rs.AssignRoutes(primary, std::move(alternatives), e);
+  if (m_rs.m_route)
+    m_callback(*m_rs.m_route, e);
 }
 
 void RoutingSession::RemoveRoute()
@@ -141,6 +155,9 @@ void RoutingSession::RemoveRoute()
   m_turnNotificationsMgr.Reset();
 
   m_route = std::make_shared<Route>(std::string{} /* router */, 0 /* route id */);
+  m_primary.reset();
+  m_alternatives.clear();
+  m_activeRouteIndex = 0;
   m_speedCameraManager.Reset();
   m_speedCameraManager.SetRoute(m_route);
 }
@@ -688,12 +705,22 @@ bool RoutingSession::AutoReroute()
 void RoutingSession::AssignRoute(std::shared_ptr<Route> const & route, RouterResultCode e)
 {
   CHECK_THREAD_CHECKER(m_threadChecker, ());
+  AssignRoutes(route, {}, e);
+}
 
-  if (e != RouterResultCode::NoError)
+void RoutingSession::AssignRoutes(std::shared_ptr<Route> const & primary,
+                                  std::vector<std::shared_ptr<Route>> && alternatives, RouterResultCode e)
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+
+  if (e != RouterResultCode::NoError || !primary)
   {
     // Route building was not success. If the former route is valid let's continue moving along it.
     // If not, let's set corresponding state.
-    if (m_route->IsValid())
+    // Deliberately do NOT touch m_alternatives / m_activeRouteIndex here: a
+    // cancelled or NeedMoreMaps alternative request must not wipe the
+    // alternatives of the currently displayed route.
+    if (m_route && m_route->IsValid())
       SetState(SessionState::OnRoute);
     else
       SetState(SessionState::NoValidRoute);
@@ -703,10 +730,22 @@ void RoutingSession::AssignRoute(std::shared_ptr<Route> const & route, RouterRes
   RemoveRoute();
   SetState(SessionState::RouteNotStarted);
   m_lastCompletionPercent = 0;
-  m_checkpoints.SetPointFrom(route->GetPoly().Front());
+  m_checkpoints.SetPointFrom(primary->GetPoly().Front());
 
-  route->SetRoutingSettings(m_routingSettings);
-  m_route = route;
+  primary->SetRoutingSettings(m_routingSettings);
+  m_primary = primary;
+  m_route = primary;
+  // Keep only non-null candidates: a partially filled batch response (a
+  // failed alternative fetch) must not leave null slots behind, since
+  // SelectAlternative() and GetRouteCount() index m_alternatives directly.
+  m_alternatives.clear();
+  m_alternatives.reserve(alternatives.size());
+  for (auto & alternative : alternatives)
+  {
+    if (alternative)
+      m_alternatives.push_back(std::move(alternative));
+  }
+  m_activeRouteIndex = 0;
   m_speedCameraManager.Reset();
   m_speedCameraManager.SetRoute(m_route);
 }
@@ -1051,6 +1090,68 @@ void RoutingSession::SetLocaleWithJsonForTesting(std::string const & json, std::
 {
   CHECK_THREAD_CHECKER(m_threadChecker, ());
   m_turnNotificationsMgr.SetLocaleWithJsonForTesting(json, locale);
+}
+
+uint32_t RoutingSession::GetRouteCount() const
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  if (!m_route)
+    return 0;
+  return static_cast<uint32_t>(1 + m_alternatives.size());
+}
+
+bool RoutingSession::SelectAlternative(uint32_t index)
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  uint32_t const total = static_cast<uint32_t>(m_alternatives.size()) + 1u;
+  if (total <= 1)
+  {
+    LOG(LINFO, ("RoutingSession::SelectAlternative(index=", index, "): no alternatives stored"));
+    return false;
+  }
+  if (index >= total)
+  {
+    LOG(LINFO, ("RoutingSession::SelectAlternative(index=", index, "): out of range, total=", total));
+    return false;
+  }
+  uint32_t const prevActive = m_activeRouteIndex;
+  // m_activeRouteIndex == 0 means primary; m_activeRouteIndex == k (k >= 1) means alternatives[k-1].
+  m_activeRouteIndex = index;
+  if (index == 0)
+  {
+    if (!m_primary)
+    {
+      LOG(LINFO, ("RoutingSession::SelectAlternative: index=0 but primary is null, prevActive=", prevActive));
+      return false;
+    }
+    m_route = m_primary;
+  }
+  else
+  {
+    m_route = m_alternatives[index - 1];
+    // Every slot of m_alternatives is non-null (AssignRoutes filters nulls),
+    // but keep the check as a cheap invariant guard.
+    CHECK(m_route, ("RoutingSession::SelectAlternative: alternative", index - 1, "is null"));
+  }
+  // NOTE: the UI only exposes alternatives while the route is being planned;
+  // the chip strip is hidden during following. If alternatives are ever made
+  // selectable while navigating, this method must also refresh
+  // m_speedCameraManager.SetRoute(m_route) and the following info, since
+  // m_route is swapped underneath them here.
+  return true;
+}
+
+bool RoutingSession::GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  std::shared_ptr<Route> const route = (index == 0 ? m_primary : (index - 1 < m_alternatives.size()
+                                                                      ? m_alternatives[index - 1]
+                                                                      : nullptr));
+  if (!route || !route->IsValid())
+    return false;
+  timeSec = route->GetTotalTimeSec();
+  distanceM = route->GetTotalDistanceMeters();
+  return true;
 }
 
 std::string DebugPrint(SessionState state)

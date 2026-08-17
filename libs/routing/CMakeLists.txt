@@ -16,6 +16,10 @@ set(SRC
   base/routing_result.hpp
   base/small_list.hpp
   base/small_list.cpp
+  brouter_router.cpp
+  brouter_router.hpp
+  brouter_gpx_parser.cpp
+  brouter_gpx_parser.hpp
   lanes/lane_info.cpp
   lanes/lane_info.hpp
   lanes/lane_way.cpp
@@ -197,6 +201,11 @@ set(SRC
 
 omim_add_library(${PROJECT_NAME} ${SRC})
 
+if (PLATFORM_ANDROID)
+  target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/android/sdk/src/main/cpp)
+endif()
+
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
     base
@@ -206,6 +215,7 @@ target_link_libraries(${PROJECT_NAME}
     indexer
     kml
     platform
+    pugixml
     routing_common
     traffic
     transit

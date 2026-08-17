@@ -25,6 +25,7 @@ import app.organicmaps.sdk.routing.RoutingRecommendationListener;
 import app.organicmaps.sdk.routing.TransitRouteInfo;
 import app.organicmaps.sdk.settings.SpeedCameraMode;
 import app.organicmaps.sdk.util.Constants;
+import app.organicmaps.sdk.util.Distance;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -373,6 +374,20 @@ public class Framework
 
   public static native void nativeMemoryWarning();
   public static native void nativeSaveRoute();
+
+  // Alternative routes produced by the current routing engine.
+  public static native int nativeGetRouteAlternativeCount();
+
+  public static native int nativeGetActiveRouteIndex();
+
+  public static native boolean nativeSelectRouteAlternative(int index);
+
+  // Time & distance of the route at |index| (0 = primary), used by the
+  // alternative-route chips in the planning UI.
+  @Nullable
+  public static native Distance nativeGetRouteAlternativeDistance(int index);
+
+  public static native int nativeGetRouteAlternativeTimeSec(int index);
 
   public static native void nativeSetAutoReroute(boolean autoReroute);
   public static native boolean nativeAutoReroute();

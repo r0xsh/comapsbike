@@ -214,3 +214,6 @@ tools/unix/maps/settings.sh
 # VS Code
 .vscode
 .cache
+
+knowledge
+mise.toml

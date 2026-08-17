@@ -175,6 +175,20 @@ public:
   std::shared_ptr<Route> GetRouteForTests() const { return m_route; }
   void SetGuidesForTests(GuidesTracks guides) { m_router->SetGuidesTracks(std::move(guides)); }
 
+  /// @name Alternative routes support.
+  /// @{
+  /// Number of alternative routes the current engine produced (1 if the
+  /// engine does not support alternatives).
+  uint32_t GetRouteCount() const;
+  /// Index of the currently selected alternative (0 = primary route).
+  uint32_t GetActiveRouteIndex() const { return m_activeRouteIndex; }
+  /// Select one of the produced alternatives. Returns false if @p index is out of range.
+  bool SelectAlternative(uint32_t index);
+  /// Time (seconds) and distance (meters) of the route at @p index (0 = primary).
+  /// Returns false if @p index is out of range or the route is not ready.
+  bool GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const;
+  /// @}
+
   double GetCompletionPercent() const;
   std::vector<double> GetIntermediateStopsProgress() const;
 
@@ -186,10 +200,15 @@ private:
 
     DoReadyCallback(RoutingSession & rs, ReadyCallback const & cb) : m_rs(rs), m_callback(cb) {}
 
-    void operator()(std::shared_ptr<Route> const & route, RouterResultCode e);
+    void operator()(std::vector<std::shared_ptr<Route>> routes, RouterResultCode e);
   };
 
   void AssignRoute(std::shared_ptr<Route> const & route, RouterResultCode e);
+  /// \brief Like AssignRoute but also fills m_alternatives with extra candidates
+  /// and resets m_activeRouteIndex to 0. Used by engines that produce multiple
+  /// alternative routes (e.g. the BRouter engine).
+  void AssignRoutes(std::shared_ptr<Route> const & primary,
+                     std::vector<std::shared_ptr<Route>> && alternatives, RouterResultCode e);
   /// RemoveRoute() removes m_route and resets route attributes (m_lastDistance, m_moveAwayCounter).
   void RemoveRoute();
   void RebuildRouteOnTrafficUpdate();
@@ -199,6 +218,9 @@ private:
 private:
   std::unique_ptr<AsyncRouter> m_router;
   std::shared_ptr<Route> m_route;
+  std::shared_ptr<Route> m_primary;
+  std::vector<std::shared_ptr<Route>> m_alternatives;
+  uint32_t m_activeRouteIndex = 0;
   SessionState m_state;
   bool m_isFollowing;
   Checkpoints m_checkpoints;
