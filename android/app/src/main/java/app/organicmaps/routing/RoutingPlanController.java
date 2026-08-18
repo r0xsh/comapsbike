@@ -14,7 +14,6 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import app.organicmaps.MwmApplication;
@@ -283,18 +282,9 @@ public void onUpClick()
       MaterialButton btn = (MaterialButton) LayoutInflater.from(requireActivity())
                               .inflate(R.layout.routing_option_button, mRouteAlternativesContainer, false);
       btn.setText(texts.get(i));
-      if (i == activeIdx)
-      {
-        btn.setActivated(true);
-        btn.setIconResource(R.drawable.ic_checkmark);
-        btn.setIconTint(ContextCompat.getColorStateList(requireActivity(), R.color.routing_toolbar_icon_tint));
-      }
-      else
-      {
-        // routing_option_button.xml bakes in the checkmark icon; unselected
-        // buttons must not show it.
-        btn.setIcon(null);
-      }
+      // Active state follows the routing selector pattern: white background
+      // with a contrasting text color (see routing_alternative_chip_*).
+      btn.setActivated(i == activeIdx);
       btn.setOnClickListener(v -> {
         if (index == RoutingController.get().getActiveRouteIndex())
           return;
