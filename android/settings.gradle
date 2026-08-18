@@ -13,6 +13,6 @@ dependencyResolutionManagement {
         maven { url = 'https://www.jitpack.io' } // MPAndroidChart
     }
 }
-rootProject.name = 'CoMaps'
+rootProject.name = 'CoBike'
 include ':app'
 include ':sdk'

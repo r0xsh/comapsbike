@@ -102,5 +102,5 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: android-${{ matrix.flavor }}
-          path: android/app/build/outputs/apk/**/CoMaps-*.apk
+          path: android/app/build/outputs/apk/**/CoBike-*.apk
           if-no-files-found: error

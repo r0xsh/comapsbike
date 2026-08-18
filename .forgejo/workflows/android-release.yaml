@@ -140,7 +140,7 @@ jobs:
         if: ${{ matrix.flavor == 'web' }}
         shell: bash
         run: |
-          (cd ./android/app/build/outputs/apk/web/release/ && sha256sum CoMaps-${{ needs.tag.outputs.code }}-web-release.apk > CoMaps-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum)
+          (cd ./android/app/build/outputs/apk/web/release/ && sha256sum CoBike-${{ needs.tag.outputs.code }}-web-release.apk > CoBike-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum)
           {
             cat ${{ env.RELEASE_NOTES }}
             echo ""
@@ -149,7 +149,7 @@ jobs:
             echo ""
             echo "sha256sum:"
             echo -e '\n```'
-            tr -d '\n' < ./android/app/build/outputs/apk/web/release/CoMaps-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum
+            tr -d '\n' < ./android/app/build/outputs/apk/web/release/CoBike-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum
             echo -e '\n```'
           } > ${{ runner.temp }}/release-notes.txt
 
@@ -161,8 +161,8 @@ jobs:
           direction: upload
           release-dir: ./android/app/build/outputs/apk/web/release
           #release-files: |
-          #  ./android/app/build/outputs/apk/web/release/CoMaps-${{ needs.tag.outputs.code }}-web-release.apk
-          #  ./android/app/build/outputs/apk/web/release/CoMaps-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum
+          #  ./android/app/build/outputs/apk/web/release/CoBike-${{ needs.tag.outputs.code }}-web-release.apk
+          #  ./android/app/build/outputs/apk/web/release/CoBike-${{ needs.tag.outputs.code }}-web-release.apk.sha256sum
 
       - name: Upload debug symbols
         uses: actions/upload-artifact@v3

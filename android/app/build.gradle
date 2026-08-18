@@ -26,8 +26,8 @@ def getCommitMessage() {
   return run(['git', '--no-pager', 'show', '-s', '--format=%s%n%n%b', 'HEAD']).trim()
 }
 
-project.ext.appId = 'app.comaps'
-project.ext.appName = 'CoMaps'
+project.ext.appId = 'me.antoinebagnaud.cobike'
+project.ext.appName = 'CoBike'
 
 
 java {
@@ -92,7 +92,7 @@ android {
       applicationIdSuffix '.google'
       versionName = android.defaultConfig.versionName + '-Google'
       buildConfigField 'String', 'SUPPORT_MAIL', '"gplay@comaps.app"'
-      buildConfigField 'String', 'REVIEW_URL', '"market://details?id=app.comaps.google"'
+      buildConfigField 'String', 'REVIEW_URL', '"market://details?id=me.antoinebagnaud.cobike.google"'
     }
 
     // Distributed directly by the project, e.g. in repo releases, chats, etc.
@@ -115,7 +115,7 @@ android {
       versionName = android.defaultConfig.versionName + '-Huawei'
       versionCode = HUAWEI_VERSION_CODE_BASE + android.defaultConfig.versionCode
       buildConfigField 'String', 'SUPPORT_MAIL', '"huawei@comaps.app"'
-      buildConfigField 'String', 'REVIEW_URL', '"appmarket://details?id=app.comaps"'
+      buildConfigField 'String', 'REVIEW_URL', '"appmarket://details?id=me.antoinebagnaud.cobike"'
     }
   }
 
@@ -203,7 +203,7 @@ android {
       versionNameSuffix '-debug'
       zipAlignEnabled true
       signingConfig = signingConfigs.debug
-      resValue 'string', 'app_name', 'CoMaps Debug'
+      resValue 'string', 'app_name', 'CoBike Debug'
       packagingOptions.jniLibs.useLegacyPackaging true
       android.packagingOptions.jniLibs.keepDebugSymbols += '**/liborganicmaps.so'
     }
@@ -247,7 +247,7 @@ android {
       // To learn more, go to the documentation section about R8 configuration files.
       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
       matchingFallbacks = ['release'] // use dependencies of "release" build type
-      resValue 'string', 'app_name', 'CoMaps Test'
+      resValue 'string', 'app_name', 'CoBike Test'
       android.packagingOptions.jniLibs.keepDebugSymbols += '**/liborganicmaps.so'
     }
   }

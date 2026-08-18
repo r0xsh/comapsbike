@@ -1,0 +1,100 @@
+# Builds the F-Droid release APK when a GitHub Release is published and
+# uploads it to that release.
+#
+# Required repository secrets (base64-encoded):
+#   RELEASE_KEYSTORE   -> android/app/release.keystore
+#   SECURE_PROPERTIES  -> android/app/secure.properties.release
+#                         (must contain secretReleaseStoreFile=release.keystore,
+#                          secretReleaseStorePassword, secretReleaseKeyAlias,
+#                          secretReleaseKeyPassword)
+name: Build CoBike APK on release
+
+on:
+  release:
+    types: [published]
+
+env:
+  JAVA_HOME: /usr/lib/jvm/temurin-21-jdk-amd64  # Java 21 is required for Android Gradle 8 plugin
+
+jobs:
+  build-release-apk:
+    name: Build F-Droid Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install build tools and dependencies
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build \
+          qt6-base-dev \
+          qt6-declarative-dev \
+          qt6-positioning-dev \
+          libqt6svg6-dev \
+          optipng \
+          libfreetype-dev \
+          libharfbuzz-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev \
+          python3-pip \
+          zlib1g-dev
+          pip install "protobuf<3.21" --break-system-packages
+
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 200 # enough to get all commits for the current day
+
+      - name: Parallel submodules checkout
+        shell: bash
+        run: git submodule update --depth 1 --init --recursive --jobs=$(($(nproc) * 20))
+
+      - name: Restore release keys
+        shell: bash
+        working-directory: android
+        env:
+          SECURE_PROPERTIES: ${{ secrets.SECURE_PROPERTIES }}
+          RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
+        run: |
+          test -n "$SECURE_PROPERTIES" || { echo "::error::Missing SECURE_PROPERTIES secret"; exit 1; }
+          test -n "$RELEASE_KEYSTORE" || { echo "::error::Missing RELEASE_KEYSTORE secret"; exit 1; }
+          echo "$SECURE_PROPERTIES" | base64 -d > app/secure.properties.release
+          echo "$RELEASE_KEYSTORE" | base64 -d > app/release.keystore
+
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: release-build
+
+      - name: Compile F-Droid Release APK
+        shell: bash
+        working-directory: android
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+        run: |
+          cmake --version
+          ninja --version
+          ./gradlew assembleFdroidRelease
+
+      - name: Upload APK to GitHub Release
+        shell: bash
+        working-directory: android
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK_FILE=$(find app/build/outputs/apk/fdroid/release -name "*.apk" -type f | head -n 1)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "::error::No APK file found!"
+            exit 1
+          fi
+
+          (cd "$(dirname "$APK_FILE")" && sha256sum "$(basename "$APK_FILE")" > "$(basename "$APK_FILE").sha256sum")
+
+          echo "Uploading $APK_FILE to release"
+          gh release upload ${{ github.event.release.tag_name }} "$APK_FILE" "$APK_FILE.sha256sum" \
+            --repo ${{ github.repository }} \
+            --clobber

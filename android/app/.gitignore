@@ -6,6 +6,7 @@
 /secure.properties.release
 /comaps-test.keystore
 /comaps-release.keystore
+/release.keystore
 /libnotify.properties
 /google-play.json
 /huawei-appgallery.json
