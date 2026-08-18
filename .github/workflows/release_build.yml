@@ -20,6 +20,8 @@ jobs:
   build-release-apk:
     name: Build F-Droid Release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Install build tools and dependencies
         shell: bash
