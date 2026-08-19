@@ -28,3 +28,9 @@
 # R8 crypts the source line numbers in all log messages.
 # https://github.com/organicmaps/organicmaps/issues/6559#issuecomment-1812039926
 -dontoptimize
+
+# BRouterServiceClient is called from native code via JNI (GetStaticMethodID),
+# which R8 cannot see. Keep it so release builds can still request routes.
+-keep class app.organicmaps.sdk.brouter.BRouterServiceClient {
+  public static java.lang.String[] calculateRoutesBlocking(android.content.Context, double[], double[], int);
+}
