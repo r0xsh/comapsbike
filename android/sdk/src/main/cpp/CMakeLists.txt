@@ -148,7 +148,8 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 #target_link_options(${PROJECT_NAME} PRIVATE "-fuse-ld=gold")
-if(ANDROID_ABI STREQUAL "arm64-v8a")
+option(ENABLE_HWASAN "Enable hardware-address sanitizer (debug builds only)" OFF)
+if(ANDROID_ABI STREQUAL "arm64-v8a" AND ENABLE_HWASAN)
   target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=hwaddress -fno-omit-frame-pointer)
   target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=hwaddress)
 endif()

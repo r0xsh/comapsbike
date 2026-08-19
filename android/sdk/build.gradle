@@ -80,6 +80,7 @@ android {
       externalNativeBuild {
         cmake {
           arguments += "-DANDROID_STL=c++_shared"
+          arguments += "-DENABLE_HWASAN=ON"
         }
       }
     }
