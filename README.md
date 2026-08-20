@@ -10,6 +10,10 @@ CoMaps has stated that implementing BRouter is [not planned](https://codeberg.or
 
 I also loved how the [Geovelo](https://www.geovelo.fr/) app offers multiple route alternatives. Sadly, Geovelo is not fully offline and can sometimes provide weird, unsafe paths.
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the planned features.
+
 ## Demo
 
 <video src="https://github.com/user-attachments/assets/dc448887-67b9-46f4-a8dc-66ff8268c6a7" width="300" controls muted loop></video>
