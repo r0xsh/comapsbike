@@ -154,5 +154,12 @@
   <color name="tourism">#9C6136</color>
   <color name="transport">#2F6499</color>
   <color name="water">#54A3B6</color>
+
+  <!-- Surface analysis (BRouter way tags) -->
+  <color name="surface_paved">#4CAF50</color>
+  <color name="surface_gravel">#FFC107</color>
+  <color name="surface_dirt">#8D6E63</color>
+  <color name="surface_singletrack">#FF7043</color>
+  <color name="surface_unknown">#9E9E9E</color>
 </resources>
 

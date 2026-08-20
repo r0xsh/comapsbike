@@ -20,6 +20,8 @@ set(SRC
   brouter_router.hpp
   brouter_gpx_parser.cpp
   brouter_gpx_parser.hpp
+  route_surface.cpp
+  route_surface.hpp
   lanes/lane_info.cpp
   lanes/lane_info.hpp
   lanes/lane_way.cpp

@@ -1154,6 +1154,18 @@ bool RoutingSession::GetRouteAlternativeInfo(uint32_t index, double & timeSec, d
   return true;
 }
 
+bool RoutingSession::GetRouteAlternativeSurfaceStats(uint32_t index, SurfaceStats & stats) const
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  std::shared_ptr<Route> const route = (index == 0 ? m_primary : (index - 1 < m_alternatives.size()
+                                                                      ? m_alternatives[index - 1]
+                                                                      : nullptr));
+  if (!route || !route->IsValid() || !route->HasSurfaceStats())
+    return false;
+  stats = route->GetSurfaceStats();
+  return true;
+}
+
 std::string DebugPrint(SessionState state)
 {
   switch (state)

@@ -389,6 +389,13 @@ public class Framework
 
   public static native int nativeGetRouteAlternativeTimeSec(int index);
 
+  // Per-surface distances of the route at |index| (0 = primary) in the order
+  // [paved, gravel, dirt, singletrack, unknown], or null when the route
+  // carries no surface data (non-BRouter engines, BRouter data sets without
+  // way tags). Used by the surface breakdown in the planning UI.
+  @Nullable
+  public static native Distance[] nativeGetRouteAlternativeSurface(int index);
+
   public static native void nativeSetAutoReroute(boolean autoReroute);
   public static native boolean nativeAutoReroute();
 

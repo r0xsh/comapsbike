@@ -2,6 +2,7 @@
 
 #include "routing/brouter_gpx_parser.hpp"
 #include "routing/route.hpp"
+#include "routing/route_surface.hpp"
 #include "routing/router_delegate.hpp"
 #include "routing/routing_helpers.hpp"
 #include "routing/segment.hpp"
@@ -72,7 +73,8 @@ turns::TurnItem BuildTurnItem(int idx, std::vector<TurnHint> const & hints, uint
   TurnHint const * h = FindHintForSegment(hints, idx, true /* exact */);
   if (h == nullptr)
     return turns::TurnItem(pointIndex, turns::CarDirection::None);
-  return turns::TurnItem(pointIndex, BrouterTurnToCarDirection(h->turnCode, h->angleDeg));
+  // Mode 9 voicehints carry no turn angle; direction comes from the turn code.
+  return turns::TurnItem(pointIndex, BrouterTurnToCarDirection(h->turnCode, 0.0));
 }
 
 std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
@@ -87,6 +89,7 @@ std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
     auto const & track = trackData.points;
     std::vector<TurnHint> const & hints = trackData.hints;
     std::vector<geometry::Altitude> const & trackAlts = trackData.altitudes;
+    std::vector<std::string> const & wayTagsPerPoint = trackData.wayTagsPerPoint;
     if (track.size() < 2)
       continue;
     auto const safeAlt = [](geometry::Altitude a) {
@@ -100,8 +103,12 @@ std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
 
     std::vector<RouteSegment> routeSegments;
     routeSegments.reserve(track.size() - 1);
-    std::vector<double> times = BuildCumulativeTimes(track, hints);
+    std::vector<double> times = BuildCumulativeTimes(trackData);
 
+    // Accumulate per-surface distances while building the segments. BRouter
+    // attaches the way tags to the point the way ends at, so segment i
+    // (points i -> i + 1) inherits the tags carried by point i + 1.
+    SurfaceStats surfaceStats;
     for (size_t i = 0; i < track.size() - 1; ++i)
     {
       // m_index is the polyline point index that this turn applies to, which
@@ -121,6 +128,14 @@ std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
         roadNameInfo.m_destination = best->destination;
       }
       routeSegments.emplace_back(segment, turn, junction, roadNameInfo);
+
+      std::string const & wayTags =
+          (i + 1 < wayTagsPerPoint.size()) ? wayTagsPerPoint[i + 1] : std::string{};
+      RouteSurface const surface = SurfaceFromWayTags(wayTags);
+      routeSegments.back().SetSurface(surface);
+      double const segDistM = mercator::DistanceOnEarth(track[i], track[i + 1]);
+      surfaceStats.m_distanceM[static_cast<size_t>(surface)] += segDistM;
+      surfaceStats.m_totalM += segDistM;
     }
     FillSegmentInfo(times, routeSegments);
 
@@ -134,6 +149,7 @@ std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
     route.SetRouteSegments(std::move(routeSegments));
     route.SetSubroteAttrs(std::move(subroutes));
     route.SetGeometry(track.begin(), track.end());
+    route.SetSurfaceStats(std::move(surfaceStats));
     routes.push_back(std::move(route));
     ++routeId;
   }
@@ -177,7 +193,11 @@ std::vector<Route> BRouterRouter::CalculateRoutes(Checkpoints const & checkpoint
   std::vector<BrouterTrack> tracks;
 #ifdef __ANDROID__
   // One bind cycle fetches all kMaxRoutes alternatives (Java side iterates
-  // the BRouter alternative indexes and stops on the first failure).
+  // the BRouter alternative indexes and stops on the first failure). Each
+  // mode 9 document carries per-point way tags and, via the injected
+  // profile:showspeed variable, a per-point <brouter:speed> that yields
+  // exact per-alternative route times (the <brouter:info> metadata total is
+  // shared by all alternatives and thus not per-route).
   std::vector<std::string> const gpxList = jni::BRouterCalculateRoutes(lats, lons, kMaxRoutes);
   for (auto const & gpx : gpxList)
   {

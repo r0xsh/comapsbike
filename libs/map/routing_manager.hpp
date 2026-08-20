@@ -212,6 +212,8 @@ public:
   bool SelectRouteAlternative(uint32_t index);
   /// Time (seconds) and distance (meters) of the route at @p index (0 = primary).
   bool GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const;
+  /// Per-surface distances (meters) of the route at @p index (0 = primary).
+  bool GetRouteAlternativeSurfaceStats(uint32_t index, routing::SurfaceStats & stats) const;
   /// @}
   // Sound notifications for turn instructions.
   void EnableTurnNotifications(bool enable) { m_routingSession.EnableTurnNotifications(enable); }

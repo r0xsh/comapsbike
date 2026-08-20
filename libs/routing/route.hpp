@@ -2,6 +2,7 @@
 
 #include "routing/lanes/lane_info.hpp"
 #include "routing/route_step.hpp"
+#include "routing/route_surface.hpp"
 #include "routing/routing_options.hpp"
 #include "routing/routing_settings.hpp"
 #include "routing/segment.hpp"
@@ -31,6 +32,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace location
@@ -181,6 +183,9 @@ public:
   traffic::SpeedGroup GetTraffic() const { return m_traffic; }
   void SetTraffic(traffic::SpeedGroup group) { m_traffic = group; }
 
+  RouteSurface GetSurface() const { return m_surface; }
+  void SetSurface(RouteSurface surface) { m_surface = surface; }
+
   SpeedInUnits const & GetSpeedLimit() const { return m_speedLimit; }
   void SetSpeedLimit(SpeedInUnits const & speed) { m_speedLimit = speed; }
 
@@ -222,6 +227,9 @@ private:
   std::vector<SpeedCamera> m_speedCameras;
 
   RoutingOptions m_roadTypes;
+
+  /// Surface of |m_segment| (BRouter way tags), Unknown when not available.
+  RouteSurface m_surface = RouteSurface::Unknown;
 };
 
 class Route
@@ -464,6 +472,19 @@ public:
 
   void SetMwmsPartlyProhibitedForSpeedCams(std::vector<platform::CountryFile> && mwms);
 
+  /// \brief Sets the accumulated per-surface distances of the route.
+  void SetSurfaceStats(SurfaceStats && stats)
+  {
+    m_surfaceStats = std::move(stats);
+    m_hasSurfaceStats = true;
+  }
+
+  /// \returns true when surface statistics were produced for this route
+  /// (i.e. the engine supplied way tags).
+  bool HasSurfaceStats() const { return m_hasSurfaceStats; }
+
+  SurfaceStats const & GetSurfaceStats() const { return m_surfaceStats; }
+
   /// \returns true if the route crosses at least one mwm where there are restrictions on warning
   /// about speed cameras.
   bool CrossMwmsPartlyProhibitedForSpeedCams() const;
@@ -505,6 +526,10 @@ private:
 
   // Mwms which are crossed by the route where speed cameras are prohibited.
   std::vector<platform::CountryFile> m_speedCamPartlyProhibitedMwms;
+
+  // Accumulated per-surface distances (filled by BRouterRouter::BuildRoutes).
+  SurfaceStats m_surfaceStats;
+  bool m_hasSurfaceStats = false;
 };
 
 /// \returns true if |turn| is not equal to turns::CarDirection::None or

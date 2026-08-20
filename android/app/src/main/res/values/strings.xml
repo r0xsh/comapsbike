@@ -975,6 +975,15 @@
     <string name="ruler">Ruler</string>
     <string name="routing_alternative_n">Route %1$d</string>
     <string name="routing_alternative_summary">%1$s · %2$s · %3$s</string>
+    <string name="routing_alternative_surface">%1$s · %2$s</string>
+    <string name="routing_surface_title">Surface</string>
+    <string name="surface_paved">Paved</string>
+    <string name="surface_gravel">Gravel</string>
+    <string name="surface_dirt">Dirt</string>
+    <string name="surface_singletrack">Singletrack</string>
+    <string name="surface_unknown">Unknown</string>
+    <string name="surface_legend_expanded">expanded</string>
+    <string name="surface_legend_collapsed">collapsed</string>
     <string name="cycling_routing_engine">Routing engine</string>
     <string name="cycling_engine_brouter">BRouter</string>
     <string name="cycling_engine_brouter_subtitle">Advanced offline routing engine that accounts for elevation to find the best cycling and hiking paths.</string>

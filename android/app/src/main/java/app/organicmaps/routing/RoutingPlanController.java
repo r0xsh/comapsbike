@@ -1,6 +1,7 @@
 package app.organicmaps.routing;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -38,6 +39,7 @@ import com.google.android.material.textview.MaterialTextView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class RoutingPlanController extends ToolbarController
 {
@@ -316,10 +318,52 @@ public void onUpClick()
                                                     R.dimen.text_size_routing_number).toString();
         label = requireActivity().getString(R.string.routing_alternative_summary, label,
                                             dist.toString(requireActivity()), time);
+        final String surface = surfaceSummary(requireActivity(),
+                                              RoutingController.get().getRouteAlternativeSurface(i));
+        if (surface != null)
+          label = requireActivity().getString(R.string.routing_alternative_surface, label, surface);
       }
       texts.add(label);
     }
     return texts;
+  }
+
+  /**
+   * Compact surface suffix for an alternative chip, e.g. "63% gravel".
+   * Returns null (no suffix) when the route is fully paved, mostly unknown,
+   * or carries no surface data at all.
+   */
+  @Nullable
+  private static String surfaceSummary(@NonNull Context context, @Nullable Distance[] surface)
+  {
+    if (surface == null || surface.length != SurfaceBarView.SURFACE_NAME_RES.length)
+      return null;
+    double total = 0.0;
+    for (Distance d : surface)
+      total += d.mDistance;
+    if (total <= 0.0)
+      return null;
+
+    final double pavedPercent = surface[0].mDistance / total * 100.0;
+    if (pavedPercent >= 99.5)
+      return null;
+
+    int bestIdx = -1;
+    double bestPercent = 0.0;
+    for (int i = 1; i < surface.length - 1; ++i)
+    {
+      final double percent = surface[i].mDistance / total * 100.0;
+      if (percent > bestPercent)
+      {
+        bestPercent = percent;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx < 0 || bestPercent < 10.0)
+      return null;
+
+    return String.format(Locale.getDefault(), "%d%% %s", Math.round(bestPercent),
+                         context.getString(SurfaceBarView.SURFACE_NAME_RES[bestIdx]));
   }
 
   public void updateBuildProgress(int progress, @NonNull Router router)

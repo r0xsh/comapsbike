@@ -606,6 +606,11 @@ bool RoutingManager::GetRouteAlternativeInfo(uint32_t index, double & timeSec, d
   return m_routingSession.GetRouteAlternativeInfo(index, timeSec, distanceM);
 }
 
+bool RoutingManager::GetRouteAlternativeSurfaceStats(uint32_t index, routing::SurfaceStats & stats) const
+{
+  return m_routingSession.GetRouteAlternativeSurfaceStats(index, stats);
+}
+
 void RoutingManager::RemoveRoute(bool deactivateFollowing)
 {
   GetPlatform().RunTask(Platform::Thread::Gui, [this, deactivateFollowing]()

@@ -87,8 +87,15 @@ public final class BRouterServiceClient
   }
 
   /**
-   * Synchronously call the BRouter service and return all requested GPX tracks.
+   * Synchronously call the BRouter service and return all requested tracks.
    * Must be called off the UI thread. Performs a single bind/unbind cycle.
+   * <p>
+   * Each alternative is fetched once as a mode 9 GPX document, which carries
+   * both the per-point way tags the surface analysis needs and, thanks to the
+   * injected {@code profile:showspeed} profile variable, a per-point
+   * {@code <brouter:speed>} giving exact per-alternative route times (the
+   * {@code <brouter:info>} metadata total is shared by all alternatives and
+   * thus unusable for per-route times).
    *
    * @param ctx       application context used for binding the service
    * @param lats      latitudes of the waypoints (length ≥ 2)
@@ -133,12 +140,24 @@ public final class BRouterServiceClient
         // companion app.
         params.putString("v", "bicycle");
         params.putString("fast", "1");
-        // Match OsmAnd defaults: ask BRouter for full OsmAnd-format <rtept> turn
-        // instructions and allow the compressed ejY0/base64+gzip envelope.
-        params.putString("turnInstructionFormat", "osmand");
+        // Ask BRouter for "BRouter style" mode 9 output: the only instruction
+        // format that includes per-point way tags (<brouter:way> with
+        // highway/surface/tracktype key=value pairs), which the surface
+        // analysis relies on. It also writes a <brouter:speed> per point
+        // (derived from the exact per-node route times) once the showspeed
+        // profile variable is set.
+        params.putString("turnInstructionMode", "9");
         params.putString("acceptCompressedResult", "true");
         params.putString("trackFormat", "gpx");
         params.putString("alternativeidx", Integer.toString(idx));
+        // Inject the showspeed profile variable via the "profile:" request
+        // prefix: RoutingParamCollector turns it into an assignment expression
+        // in the profile context, which makes mode 9 emit <brouter:speed> per
+        // point. That gives the app exact per-alternative route times (the
+        // <brouter:info> metadata total is shared by all alternatives and thus
+        // not per-route). A plain "showspeed=1" parameter is ignored: BRouter
+        // treats it as a profile expression variable, not a request option.
+        params.putString("profile:showspeed", "1");
         try
         {
           results[n++] = service.getTrackFromParams(params);

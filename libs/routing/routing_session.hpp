@@ -3,6 +3,7 @@
 #include "routing/async_router.hpp"
 #include "routing/checkpoints.hpp"
 #include "routing/position_accumulator.hpp"
+#include "routing/route.hpp"
 #include "routing/router.hpp"
 #include "routing/routing_callbacks.hpp"
 #include "routing/routing_settings.hpp"
@@ -187,6 +188,9 @@ public:
   /// Time (seconds) and distance (meters) of the route at @p index (0 = primary).
   /// Returns false if @p index is out of range or the route is not ready.
   bool GetRouteAlternativeInfo(uint32_t index, double & timeSec, double & distanceM) const;
+  /// \brief Fills |stats| with the per-surface distances of the route at |index| (0 = primary).
+  /// \returns false when the route does not exist or carried no surface data.
+  bool GetRouteAlternativeSurfaceStats(uint32_t index, SurfaceStats & stats) const;
   /// @}
 
   double GetCompletionPercent() const;

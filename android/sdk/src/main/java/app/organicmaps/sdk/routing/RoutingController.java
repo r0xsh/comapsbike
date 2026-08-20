@@ -14,6 +14,7 @@ import app.organicmaps.sdk.bookmarks.data.MapObject;
 import app.organicmaps.sdk.brouter.BRouterServiceClient;
 import app.organicmaps.sdk.location.LocationHelper;
 import app.organicmaps.sdk.util.concurrency.UiThread;
+import app.organicmaps.sdk.util.Distance;
 import app.organicmaps.sdk.util.log.Logger;
 import app.organicmaps.sdk.widget.placepage.CoordinatesFormat;
 
@@ -883,6 +884,17 @@ public class RoutingController
     mCachedRoutingInfo = Framework.nativeGetRouteFollowingInfo();
     mContainer.updateBuildProgress(mLastBuildProgress, mLastRouterType);
     return true;
+  }
+
+  /**
+   * Per-surface distances (meters) of the route at @p index (0 = primary) in
+   * the order [paved, gravel, dirt, singletrack, unknown], or null when the
+   * route carries no surface data.
+   */
+  @Nullable
+  public Distance[] getRouteAlternativeSurface(int index)
+  {
+    return Framework.nativeGetRouteAlternativeSurface(index);
   }
 
   private void cancelRemovingIntermediatePointsTransaction()

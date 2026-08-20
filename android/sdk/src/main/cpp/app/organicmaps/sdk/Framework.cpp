@@ -41,6 +41,7 @@
 #include "indexer/validate_and_format_contacts.hpp"
 
 #include "routing/following_info.hpp"
+#include "routing/route_surface.hpp"
 #include "routing/speed_camera_manager.hpp"
 
 #include "platform/country_file.hpp"
@@ -66,6 +67,7 @@
 
 #include "3party/open-location-code/openlocationcode.h"
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1928,6 +1930,46 @@ JNIEXPORT jint JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRouteAlternat
   if (!frm()->GetRoutingManager().GetRouteAlternativeInfo(static_cast<uint32_t>(index), timeSec, distanceM))
     return 0;
   return static_cast<jint>(timeSec);
+}
+
+// Per-surface distances of the route at |index| (0 = primary) in the order
+// [paved, gravel, dirt, singletrack, unknown], or null when the route carries
+// no surface data (non-BRouter engines, BRouter data sets without way tags).
+// Used by the surface breakdown in the planning UI.
+JNIEXPORT jobjectArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRouteAlternativeSurface(
+    JNIEnv * env, jclass, jint index)
+{
+  routing::SurfaceStats stats;
+  if (!frm()->GetRoutingManager().GetRouteAlternativeSurfaceStats(static_cast<uint32_t>(index), stats))
+    return nullptr;
+  // A route that is entirely unknown carries no usable data: hide the UI.
+  if (!stats.HasNamedSurface())
+    return nullptr;
+
+  static jclass const distanceClass = jni::GetGlobalClassRef(env, "app/organicmaps/sdk/util/Distance");
+  static jmethodID const distanceConstructor = jni::GetConstructorID(env, distanceClass, "(DLjava/lang/String;B)V");
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(routing::kRouteSurfaceCount), distanceClass, nullptr);
+  // SurfaceStats is indexed by the RouteSurface enum (Unknown = 0, Paved = 1,
+  // ...), but the Java UI expects the documented order [paved, gravel, dirt,
+  // singletrack, unknown]; remap before crossing the JNI boundary.
+  std::array<routing::RouteSurface, routing::kRouteSurfaceCount> const kOrder = {
+      routing::RouteSurface::Paved, routing::RouteSurface::Gravel,
+      routing::RouteSurface::Dirt, routing::RouteSurface::Singletrack,
+      routing::RouteSurface::Unknown};
+  for (size_t i = 0; i < kOrder.size(); ++i)
+  {
+    size_t const src = static_cast<size_t>(kOrder[i]);
+    // Keep the raw meter value in Distance.mDistance (the formatted string is
+    // in the value's own unit, e.g. "17" with Kilometers) so Java-side
+    // percent computations always mix meters.
+    platform::Distance const distance = platform::Distance::CreateFormatted(stats.m_distanceM[src]);
+    env->SetObjectArrayElement(result, static_cast<jsize>(i),
+                               env->NewObject(distanceClass, distanceConstructor, stats.m_distanceM[src],
+                                              jni::ToJavaString(env, distance.GetDistanceString()),
+                                              static_cast<uint8_t>(distance.GetUnits())));
+  }
+  return result;
 }
 
 }  // extern "C"
