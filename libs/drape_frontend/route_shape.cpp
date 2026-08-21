@@ -505,7 +505,18 @@ drape_ptr<df::SubrouteData> RouteShape::CacheRoute(ref_ptr<dp::GraphicsContext> 
     return nullptr;
 
   std::vector<glsl::vec4> segmentsColors;
-  if (!subroute->m_traffic.empty())
+  if (!subroute->m_surfaceColors.empty() && subroute->m_surfaceColors.size() == endIndex - startIndex)
+  {
+    // Per-segment surface colors take precedence over traffic; every segment
+    // is fully opaque so the vertex color replaces the style color.
+    segmentsColors.reserve(endIndex - startIndex);
+    for (size_t i = startIndex; i < endIndex; ++i)
+    {
+      auto const & color = subroute->m_surfaceColors[i];
+      segmentsColors.emplace_back(color.GetRedF(), color.GetGreenF(), color.GetBlueF(), 1.0f);
+    }
+  }
+  else if (!subroute->m_traffic.empty())
   {
     segmentsColors.reserve(endIndex - startIndex);
     for (size_t i = startIndex; i < endIndex; ++i)

@@ -25,10 +25,13 @@ constexpr int kTurnC = 0;       // Continue (no turn)
 constexpr int kTurnTSLL = 1;    // Turn slight left
 constexpr int kTurnTSLR = 2;    // Turn slight right
 constexpr int kTurnTL = 3;      // Turn left
-constexpr int kTurnTRL = 4;     // Turn right (left-hand bend)
-constexpr int kTurnTR = 5;      // Turn right
-constexpr int kTurnTRU = 6;     // U-turn right
-constexpr int kTurnTU = 7;      // U-turn
+constexpr int kTurnTR = 4;      // Turn right
+constexpr int kTurnTRU = 5;     // U-turn right
+constexpr int kTurnTU = 6;      // U-turn (180 degrees)
+constexpr int kTurnTSHL = 7;    // Turn sharply left
+constexpr int kTurnTSHR = 8;    // Turn sharply right
+constexpr int kTurnKL = 9;      // Keep left
+constexpr int kTurnKR = 10;     // Keep right
 constexpr int kTurnRNDB1 = 11;  // Roundabout exit 1
 constexpr int kTurnRNDB2 = 12;  // Roundabout exit 2
 constexpr int kTurnRNDB3 = 13;
@@ -37,6 +40,16 @@ constexpr int kTurnRNDB5 = 15;
 constexpr int kTurnRNDB6 = 16;
 constexpr int kTurnRNDB7 = 17;
 constexpr int kTurnRNDB8 = 18;
+constexpr int kTurnRNLB1 = 21;  // Roundabout (left turn) exit 1
+constexpr int kTurnRNLB2 = 22;
+constexpr int kTurnRNLB3 = 23;
+constexpr int kTurnRNLB4 = 24;
+constexpr int kTurnRNLB5 = 25;
+constexpr int kTurnRNLB6 = 26;
+constexpr int kTurnRNLB7 = 27;
+constexpr int kTurnRNLB8 = 28;
+constexpr int kTurnEL = 29;     // Exit left (motorway exit)
+constexpr int kTurnER = 30;     // Exit right (motorway exit)
 
 // Map a BRouter turn string (uppercase) to a numeric code. Returns -1
 // (unknown) so callers can fall back to angle-based classification.
@@ -49,10 +62,15 @@ int ParseBrouterTurnCode(std::string const & s)
   if (std::strcmp(p, "TSLL") == 0)   return kTurnTSLL;
   if (std::strcmp(p, "TSLR") == 0)   return kTurnTSLR;
   if (std::strcmp(p, "TL") == 0)     return kTurnTL;
-  if (std::strcmp(p, "TRL") == 0)    return kTurnTRL;
   if (std::strcmp(p, "TR") == 0)     return kTurnTR;
   if (std::strcmp(p, "TRU") == 0)    return kTurnTRU;
   if (std::strcmp(p, "TU") == 0)     return kTurnTU;
+  if (std::strcmp(p, "TSHL") == 0)   return kTurnTSHL;
+  if (std::strcmp(p, "TSHR") == 0)   return kTurnTSHR;
+  if (std::strcmp(p, "KL") == 0)     return kTurnKL;
+  if (std::strcmp(p, "KR") == 0)     return kTurnKR;
+  if (std::strcmp(p, "EL") == 0)     return kTurnEL;
+  if (std::strcmp(p, "ER") == 0)     return kTurnER;
   if (std::strcmp(p, "RNDB1") == 0)  return kTurnRNDB1;
   if (std::strcmp(p, "RNDB2") == 0)  return kTurnRNDB2;
   if (std::strcmp(p, "RNDB3") == 0)  return kTurnRNDB3;
@@ -61,6 +79,14 @@ int ParseBrouterTurnCode(std::string const & s)
   if (std::strcmp(p, "RNDB6") == 0)  return kTurnRNDB6;
   if (std::strcmp(p, "RNDB7") == 0)  return kTurnRNDB7;
   if (std::strcmp(p, "RNDB8") == 0)  return kTurnRNDB8;
+  if (std::strcmp(p, "RNLB1") == 0)  return kTurnRNLB1;
+  if (std::strcmp(p, "RNLB2") == 0)  return kTurnRNLB2;
+  if (std::strcmp(p, "RNLB3") == 0)  return kTurnRNLB3;
+  if (std::strcmp(p, "RNLB4") == 0)  return kTurnRNLB4;
+  if (std::strcmp(p, "RNLB5") == 0)  return kTurnRNLB5;
+  if (std::strcmp(p, "RNLB6") == 0)  return kTurnRNLB6;
+  if (std::strcmp(p, "RNLB7") == 0)  return kTurnRNLB7;
+  if (std::strcmp(p, "RNLB8") == 0)  return kTurnRNLB8;
   return -1;
 }
 
@@ -260,9 +286,9 @@ BrouterTrack ParseGpxResponse(std::string const & gpx)
   std::string lastWay;
   for (pugi::xml_node trk : gpxNode.children("trk"))
   {
+    size_t pointIdx = 0;
     for (pugi::xml_node seg : trk.children("trkseg"))
     {
-      size_t pointIdx = 0;
       for (pugi::xml_node pt : seg.children("trkpt"))
       {
         result.points.emplace_back(mercator::FromLatLon(ReadDoubleAttr(pt, "lat", 0.0),
@@ -285,10 +311,15 @@ turns::CarDirection BrouterTurnToCarDirection(int code, double angleDeg)
   case kTurnTSLL: return turns::CarDirection::TurnSlightLeft;
   case kTurnTSLR: return turns::CarDirection::TurnSlightRight;
   case kTurnTL:   return turns::CarDirection::TurnLeft;
-  case kTurnTRL:  return turns::CarDirection::TurnRight;
   case kTurnTR:   return turns::CarDirection::TurnRight;
+  case kTurnTSHL: return turns::CarDirection::TurnSharpLeft;
+  case kTurnTSHR: return turns::CarDirection::TurnSharpRight;
+  case kTurnKL:   return turns::CarDirection::None;
+  case kTurnKR:   return turns::CarDirection::None;
   case kTurnTRU:  return turns::CarDirection::UTurnRight;
   case kTurnTU:   return turns::CarDirection::UTurnLeft;
+  case kTurnEL:   return turns::CarDirection::ExitHighwayToLeft;
+  case kTurnER:   return turns::CarDirection::ExitHighwayToRight;
   case kTurnRNDB1:
   case kTurnRNDB2:
   case kTurnRNDB3:
@@ -296,7 +327,15 @@ turns::CarDirection BrouterTurnToCarDirection(int code, double angleDeg)
   case kTurnRNDB5:
   case kTurnRNDB6:
   case kTurnRNDB7:
-  case kTurnRNDB8: return turns::CarDirection::EnterRoundAbout;
+  case kTurnRNDB8:
+  case kTurnRNLB1:
+  case kTurnRNLB2:
+  case kTurnRNLB3:
+  case kTurnRNLB4:
+  case kTurnRNLB5:
+  case kTurnRNLB6:
+  case kTurnRNLB7:
+  case kTurnRNLB8: return turns::CarDirection::LeaveRoundAbout;
   case kTurnC:
   default:
     // No explicit turn: fall back to the angle if the GPX provides one.
@@ -304,6 +343,19 @@ turns::CarDirection BrouterTurnToCarDirection(int code, double angleDeg)
       return AngleToCarDirection(angleDeg);
     return turns::CarDirection::None;
   }
+}
+
+// BRouter converts "keep left/right" turn hints to LeaveRoundAbout arrows on
+// maps, which is visually misleading on a straight continue. Drop them so the
+// line has no arrow on keep-lane segments — the standard bicycle router does
+// not produce a turn on keep-lane segments either.
+uint32_t BrouterTurnExitNumber(int code)
+{
+  if (code >= kTurnRNDB1 && code <= kTurnRNDB8)
+    return static_cast<uint32_t>(code - kTurnRNDB1 + 1);
+  if (code >= kTurnRNLB1 && code <= kTurnRNLB8)
+    return static_cast<uint32_t>(code - kTurnRNLB1 + 1);
+  return 0;
 }
 
 std::vector<double> BuildCumulativeTimes(BrouterTrack const & track)

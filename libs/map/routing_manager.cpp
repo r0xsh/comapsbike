@@ -28,6 +28,8 @@
 #include "drape_frontend/route_renderer.hpp"
 #include "drape_frontend/route_shape.hpp"
 
+#include "drape/color.hpp"
+
 #include "routing_common/num_mwm_id.hpp"
 
 #include "indexer/data_source.hpp"
@@ -241,6 +243,23 @@ RoadWarningMarkType GetRoadType(RoutingOptions::Option road)
 
   CHECK(false, ("Invalid road type to avoid:", road));
   return RoadWarningMarkType::Count;
+}
+
+dp::Color SurfaceToRouteColor(routing::RouteSurface surface)
+{
+  // Matches the bottom-sheet legend colors (colors.xml surface_*); Unknown
+  // is shown gray, same as in the legend.
+  switch (surface)
+  {
+  case routing::RouteSurface::Paved: return dp::Color(0x4C, 0xAF, 0x50);
+  case routing::RouteSurface::Gravel: return dp::Color(0xFF, 0xC1, 0x07);
+  case routing::RouteSurface::Dirt: return dp::Color(0x8D, 0x6E, 0x63);
+  case routing::RouteSurface::Singletrack: return dp::Color(0xFF, 0x70, 0x43);
+  case routing::RouteSurface::Unknown:
+  case routing::RouteSurface::Count: return dp::Color(0x9E, 0x9E, 0x9E);
+  }
+  CHECK(false, ("Unhandled surface:", surface));
+  return dp::Color(0x9E, 0x9E, 0x9E);
 }
 
 drape_ptr<df::Subroute> CreateDrapeSubroute(vector<RouteSegment> const & segments, m2::PointD const & startPt,
@@ -899,7 +918,20 @@ bool RoutingManager::InsertRoute(Route const & route)
       // BRouter routes look like bicycle routes for rendering purposes: same
       // colour scheme, same per-segment turn distance annotation.
       subroute->m_routeType = df::RouteType::Bicycle;
-      subroute->AddStyle(df::SubrouteStyle(df::kRouteBicycle, df::RoutePattern(8.0, 2.0)));
+      if (route.GetSurfaceStats().HasNamedSurface())
+      {
+        // Color the line by surface when the data set carried way tags:
+        // solid segments in the legend colors (Unknown keeps the default
+        // bicycle colour), drawn via per-segment vertex colors.
+        subroute->AddStyle(df::SubrouteStyle(df::kRouteBicycle));
+        subroute->m_surfaceColors.reserve(segments.size());
+        for (auto const & s : segments)
+          subroute->m_surfaceColors.push_back(SurfaceToRouteColor(s.GetSurface()));
+      }
+      else
+      {
+        subroute->AddStyle(df::SubrouteStyle(df::kRouteBicycle, df::RoutePattern(8.0, 2.0)));
+      }
       FillTurnsDistancesForRendering(segments, subroute->m_baseDistance, subroute->m_turns);
       break;
     }

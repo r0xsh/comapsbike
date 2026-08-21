@@ -58,6 +58,9 @@ BrouterTrack ParseGpxResponse(std::string const & gpx);
 // "continue" and unknown codes (no arrow rendered).
 turns::CarDirection BrouterTurnToCarDirection(int code, double angleDeg);
 
+// Roundabout exit number encoded in a turn code; 0 for non-roundabout codes.
+uint32_t BrouterTurnExitNumber(int code);
+
 // Build a per-segment cumulative-time vector for the track. Priority: exact
 // per-point speeds (<brouter:speed>, enabled via the injected
 // profile:showspeed profile variable and thus present per alternative), then

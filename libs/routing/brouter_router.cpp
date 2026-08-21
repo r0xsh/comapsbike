@@ -74,7 +74,72 @@ turns::TurnItem BuildTurnItem(int idx, std::vector<TurnHint> const & hints, uint
   if (h == nullptr)
     return turns::TurnItem(pointIndex, turns::CarDirection::None);
   // Mode 9 voicehints carry no turn angle; direction comes from the turn code.
-  return turns::TurnItem(pointIndex, BrouterTurnToCarDirection(h->turnCode, 0.0));
+  // Roundabout exits keep the BRouter exit number so guidance can say
+  // "take the N-th exit" and the arrow is drawn at the exit junction.
+  return turns::TurnItem(pointIndex, BrouterTurnToCarDirection(h->turnCode, 0.0),
+                         BrouterTurnExitNumber(h->turnCode));
+}
+
+// BRouter's `VoiceHintProcessor` only attaches a roundabout hint at the EXIT
+// junction (carrying the exit number), never at the entry. As a result the
+// turn sitting at the roundabout entry is whatever non-roundabout hint
+// BRouter emitted for the approach (typically TurnSlightLeft/Right), or None
+// when the approach is a straight continue.
+//
+// The standard bicycle router, by contrast, always pairs an `EnterRoundAbout`
+// turn with the matching `LeaveRoundAbout` exit. Rewrite the nearest real
+// turn before each `LeaveRoundAbout` (with a non-zero exit number) into
+// `EnterRoundAbout` so that the bottom-sheet turn list shows the same
+// "Enter roundabout" / "Take the Nth exit" pair a cyclist sees on a bicycle
+// route, and so that TTS reads the same wording on both engines.
+//
+// Note: this only renames the entry-turn label; the on-map arrow shape is
+// identical for any `CarDirection` because a single "route-arrow" texture is
+// rotated by the polyline's local direction in the arrow shader — so the
+// visual arrow at the entry already matches the bicycle render either way.
+void SynthesizeRoundaboutEntries(std::vector<RouteSegment> & segments)
+{
+  using routing::RouteSegment;
+  using routing::turns::CarDirection;
+  using routing::turns::TurnItem;
+
+  // An exit we want to balance: leaves a roundabout with a concrete exit number.
+  auto const isRoundaboutExit = [](RouteSegment const & seg) {
+    auto const & t = seg.GetTurn();
+    return t.m_turn == CarDirection::LeaveRoundAbout && t.m_exitNum != 0;
+  };
+
+  for (size_t i = 1; i < segments.size(); ++i)
+  {
+    if (!isRoundaboutExit(segments[i]))
+      continue;
+
+    // Walk back over consecutive None segments (e.g. a straight approach)
+    // until we find the most recent real turn. j == 0 stays valid: the
+    // outer None/EnterRoundAbout guards below handle the two "nothing to
+    // rewrite" cases there as well.
+    size_t entryIdx = i - 1;
+    while (entryIdx > 0
+           && segments[entryIdx].GetTurn().m_turn == CarDirection::None)
+    {
+      --entryIdx;
+    }
+
+    auto const entryTurn = segments[entryIdx].GetTurn();
+    auto const direction = entryTurn.m_turn;
+    // Skip if there is nothing to label as entry, or we already produced
+    // an EnterRoundAbout (e.g. two exits were back-to-back through zero
+    // None segments in between).
+    if (direction == CarDirection::None || direction == CarDirection::EnterRoundAbout)
+      continue;
+
+    // Wholesale rewrite via the public SetTurn setter: BRouter responses never
+    // carry lane info, so the only things copied forward are m_index and the
+    // pedestrian direction (defaulted). m_exitNum is forced to 0 because the
+    // entry turn itself has no exit.
+    segments[entryIdx].SetTurn(
+        TurnItem(entryTurn.m_index, CarDirection::EnterRoundAbout, 0));
+  }
 }
 
 std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
@@ -137,6 +202,7 @@ std::vector<Route> BuildRoutes(std::vector<BrouterTrack> const & tracks)
       surfaceStats.m_distanceM[static_cast<size_t>(surface)] += segDistM;
       surfaceStats.m_totalM += segDistM;
     }
+    SynthesizeRoundaboutEntries(routeSegments);
     FillSegmentInfo(times, routeSegments);
 
     std::vector<Route::SubrouteAttrs> subroutes;

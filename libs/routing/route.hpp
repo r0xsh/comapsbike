@@ -149,6 +149,8 @@ public:
 
   void SetTurnExits(uint32_t exitNum) { m_turn.m_exitNum = exitNum; }
 
+  void SetTurn(turns::TurnItem const & turn) { m_turn = turn; }
+
   turns::lanes::LanesInfo & GetTurnLanes() { return m_turn.m_lanes; }
 
   void SetDistancesAndTime(double distFromBeginningMeters, double distFromBeginningMerc, double timeFromBeginningS)

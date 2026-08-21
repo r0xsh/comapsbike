@@ -159,6 +159,10 @@ struct Subroute
   m2::PolylineD m_polyline;
   std::vector<double> m_turns;
   std::vector<traffic::SpeedGroup> m_traffic;
+  // Per-segment colors in polyline order (segment i connects point i to
+  // point i + 1). When non-empty it takes precedence over m_traffic and the
+  // line is drawn with these colors (solid, transparent outline).
+  std::vector<dp::Color> m_surfaceColors;
   double m_baseDistance = 0.0;
   double m_baseDepthIndex = 0.0;
   float m_maxPixelWidth = -1.0f;

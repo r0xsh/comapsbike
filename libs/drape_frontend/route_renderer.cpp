@@ -459,7 +459,9 @@ void RouteRenderer::RenderSubroute(ref_ptr<dp::GraphicsContext> context, ref_ptr
   math::Matrix<float, 4, 4> mv = screen.GetModelView(subrouteData->m_pivot, kShapeCoordScalar);
   params.m_modelView = glsl::make_mat4(mv.m_data);
   params.m_color = glsl::ToVec4(df::GetColorConstant(style.m_color));
-  params.m_routeParams = glsl::vec4(currentHalfWidth, screenHalfWidth, dist, trafficShown ? 1.0f : 0.0f);
+  bool const hasSurfaceColors = !subrouteData->m_subroute->m_surfaceColors.empty();
+  params.m_routeParams =
+      glsl::vec4(currentHalfWidth, screenHalfWidth, dist, (trafficShown || hasSurfaceColors) ? 1.0f : 0.0f);
 
   // Adjust line color depending on route type and subroute distance. After the first stop point
   // route color is adjusted according to RouteMaskCar, RouteMaskBicycle or RouteMaskPedestrian properties.
@@ -472,7 +474,10 @@ void RouteRenderer::RenderSubroute(ref_ptr<dp::GraphicsContext> context, ref_ptr
   }
   else
   {
-    params.m_outlineColor = glsl::ToVec4(df::GetColorConstant(style.m_outlineColor));
+    // Surface-colored segments are solid; a transparent outline keeps the
+    // uniform outline color from rimming the per-segment vertex colors.
+    params.m_outlineColor =
+        hasSurfaceColors ? glsl::vec4(0.0f, 0.0f, 0.0f, 0.0f) : glsl::ToVec4(df::GetColorConstant(style.m_outlineColor));
   }
   params.m_fakeBorders =
       glsl::vec2(subrouteData->m_subroute->m_headFakeDistance, subrouteData->m_subroute->m_tailFakeDistance);
